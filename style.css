@@ -849,6 +849,113 @@ ul, li { list-style: none; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .vg-ic .ms, .vg-ic { font-size: 15px; }
+
+/* ─── 卡券：商家折叠分组（vb-*）与券行（vc-*） ─── */
+.vb-card {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-card);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.vb-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 12px;
+  min-height: 58px;
+}
+.vb-head:active { background: var(--bg2); }
+.vb-logo {
+  width: 40px; height: 40px; min-width: 40px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700;
+}
+.vb-info { flex: 1; min-width: 0; }
+.vb-name { font-size: 15px; font-weight: 600; color: var(--txt); }
+.vb-meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+  font-size: 11px; color: var(--txt2); margin-top: 2px;
+}
+.vb-exp {
+  font-size: 10px; padding: 1px 7px; border-radius: 999px;
+  font-weight: 600; white-space: nowrap;
+}
+.vb-add {
+  width: 32px; height: 32px; min-width: 32px; border-radius: 50%;
+  border: 1px solid var(--ol); background: var(--bg2); color: var(--txt2);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.vb-add:active { background: var(--bg3); }
+.vb-add .ms { font-size: 19px; }
+.vb-arrow {
+  font-size: 20px; color: var(--txt2); flex-shrink: 0;
+}
+.vb-body {
+  border-top: 1px solid var(--ol);
+  padding: 4px 12px 10px 20px;   /* 相对商家头缩进 */
+}
+.vb-addrow {
+  width: 100%; margin-top: 2px;
+  border: 1px dashed var(--ol); border-radius: var(--r-md);
+  background: var(--bg2); color: var(--txt2);
+  padding: 7px 0; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  cursor: pointer;
+}
+.vb-addrow:active { background: var(--bg3); }
+.vc-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--ol);
+  background: transparent;
+}
+.vc-row:last-of-type { border-bottom: none; }
+.vc-row:active { background: var(--bg2); border-radius: var(--r-md); }
+.vc-ic {
+  width: 34px; height: 34px; min-width: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.vc-main { flex: 1; min-width: 0; }
+.vc-name {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 13px; font-weight: 600; color: var(--txt);
+}
+.vc-tag {
+  font-size: 10px; font-weight: 500;
+  padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+}
+.vc-meta {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  margin-top: 2px;
+}
+.vc-exp {
+  font-size: 10px; padding: 1px 7px; border-radius: 999px;
+  font-weight: 600; white-space: nowrap;
+}
+.vc-scope {
+  font-size: 10px; color: var(--txt2);
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vc-right {
+  flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+}
+.vc-val {
+  font-size: 14px; font-weight: 700; color: var(--txt);
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.vc-val em { font-size: 10px; font-weight: 500; color: var(--txt2); font-style: normal; }
+.vc-use {
+  border: none; cursor: pointer;
+  background: linear-gradient(150deg, #e7c25a, #d4af37);
+  color: #3a2c00;
+  font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+.vc-use:active { transform: scale(0.94); }
+.vc-use:disabled { background: var(--bg3); color: var(--txt2); cursor: default; transform: none; }
+
 .cc-mini {
   position: relative; flex: 0 0 auto; width: 200px; aspect-ratio: 1.586 / 1; height: auto;
   border-radius: var(--r-md); scroll-snap-align: start; cursor: pointer;

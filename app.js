@@ -233,8 +233,15 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.70';
+  const APP_VERSION = '2.15.71';
   const CHANGELOG = [
+    { v: '2.15.71', date: '2026-08-27', tag: '优化', head: '卡/票：商家折叠分组 + 标签卡片样式', items: [
+      '商家卡片支持折叠/展开，展开后直接看到该商家各种券（带缩进、小标签）',
+      '标签改为 pill 卡片样式，去掉左侧颜色线，类型/到期/适用范围用色块区分',
+      '到期标签区分主次：7 天内红色、14 天内橙色、其余灰色；快到期商家与券默认排最前',
+      '添加入口细分：商家头部「＋」与展开列表底部「＋ 添加券」添加该商家券；底部悬浮「＋」添加新商家/新券',
+      '修复「＋1 使用」按钮无法点击的问题（stopPropagation 阻断全局委托）',
+    ]},
     { v: '2.15.70', date: '2026-08-27', tag: '重构', head: '卡/票改为「商家 → 券」两级结构', items: [
       '卡/票首页按商家（品牌）聚合：每张商家卡片显示券数量、最近到期、剩余可核销次数',
       '点进商家后展示该商家下的各种券（满减券、立减券、次卡等），每张独立、可单独核销',
@@ -1845,39 +1852,37 @@
    *  Page: Voucher / Card & Ticket Management (Screen _6)
    *  Track usage-based cards and tickets (e.g. 喜茶卡, 咖啡券)
    * ============================================================ */
-  /* 单张券卡片 —— 在「商家 → 券」二级页内复用，每张券独立、可单独核销 */
+  /* 单张券卡片 —— 折叠列表内复用。无颜色线，类型/到期用 pill 标签卡片区分；
+     「＋1 使用」不包 stopPropagation，靠全局委托 closest 命中按钮自身 data-action，可正常点击核销 */
   function voucherCardHTML(v) {
     const u = urgency(v.expiry);
-    const badgeCls = u.level === 'urgent' ? 'urgent' : u.level === 'soon' ? 'warn' : 'ok';
     const remaining = v.totalUses - v.usedUses;
-    const pct = Math.round((v.usedUses / v.totalUses) * 100);
     const meta = vTypeMeta(v);
-    return `<div class="card ic-card clickable" style="height:auto;min-height:72px;margin-bottom:6px;border-left:4px solid ${meta.color};padding:10px 12px" data-action="detail" data-kind="voucher" data-id="${v.id}">
-      <div class="ic-card-left">
-        <div class="ic-card-logo" style="width:36px;height:36px;min-width:36px;background:${meta.color}15;border-color:${meta.color}30">
-          <span class="ms" style="font-size:20px;color:${meta.color}">${meta.icon}</span>
-        </div>
-        <div class="ic-card-info" style="gap:3px;flex:1;min-width:0">
-          <div class="ic-card-name" style="color:var(--txt);font-size:14px;font-weight:600">${esc(v.name)}</div>
-          <div class="ic-card-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-            <span class="ic-card-tag" style="background:${meta.color}18;color:${meta.color};font-size:10px">${meta.l}</span>
-            <span class="ic-card-expiry ${badgeCls}" style="font-size:10px;padding:1px 6px">${u.txt}</span>
-          </div>
-          ${v.scope ? `<div class="muted" style="font-size:10px;color:var(--txt2);margin-top:3px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${esc(v.scope)}</div>` : ''}
+    const expStyle = u.level === 'urgent'
+      ? 'background:#dc26261a;color:#dc2626;border:1px solid #dc26263d'
+      : u.level === 'soon'
+        ? 'background:#d977061a;color:#b45309;border:1px solid #d977063d'
+        : 'background:var(--bg3);color:var(--txt2);border:1px solid var(--ol)';
+    return `<div class="vc-row clickable" data-action="detail" data-kind="voucher" data-id="${v.id}">
+      <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}">${meta.icon}</div>
+      <div class="vc-main">
+        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span></div>
+        <div class="vc-meta">
+          <span class="vc-exp" style="${expStyle}">${u.txt}</span>
+          ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
         </div>
       </div>
-      <div class="ic-card-right" style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
-        <div class="ic-card-value" style="font-size:16px;font-weight:700;color:${meta.color};line-height:1.1;font-variant-numeric:tabular-nums">${remaining}<span style="font-size:11px;font-weight:500;color:var(--txt2)">/${v.totalUses}</span></div>
-        <div class="progress thin" style="height:3px;width:44px;border-radius:4px"><i style="width:${pct}%;background:${meta.color}"></i></div>
-      </div>
-      <div class="voucher-act" style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;margin-left:auto" onclick="event.stopPropagation()">
-        <button class="btn btn-gold btn-xs" style="padding:2px 6px;font-size:11px;line-height:1.4;border-radius:6px;white-space:nowrap" data-action="voucher-use" data-id="${v.id}" ${remaining <= 0 ? 'disabled' : ''}>＋1 使用</button>
-        ${remaining <= 0 ? `<span class="muted" style="font-size:9px;text-align:center">已用完</span>` : ''}
+      <div class="vc-right">
+        <span class="vc-val">${remaining}<em>/${v.totalUses}</em></span>
+        <button class="vc-use" data-action="voucher-use" data-id="${v.id}" ${remaining <= 0 ? 'disabled' : ''}>＋1 使用</button>
       </div>
     </div>`;
   }
 
-  /* 一级：商家聚合列表 —— 按品牌（商家）分组，点进去看该商家的各种券 */
+  /* 折叠状态：品牌 → true 表示收起（默认展开） */
+  let voucherCollapsed = {};
+
+  /* 一级：商家折叠分组列表 —— 每个商家可展开/收起，展开后直接看到该商家的各种券 */
   function renderVouchers() {
     const brands = {};
     state.vouchers.forEach((v) => {
@@ -1891,33 +1896,39 @@
       if (ra !== rb) return ra - rb;            // 有即将到期的商家优先
       return ea - eb;                            // 再按最近到期日升序
     });
-    const brandCard = (b) => {
-      const items = brands[b];
+    const expPill = (u) => {
+      if (!u) return '';
+      const s = u.level === 'urgent'
+        ? 'background:#dc26261a;color:#dc2626;border:1px solid #dc26263d'
+        : u.level === 'soon'
+          ? 'background:#d977061a;color:#b45309;border:1px solid #d977063d'
+          : 'background:var(--bg3);color:var(--txt2);border:1px solid var(--ol)';
+      return `<span class="vb-exp" style="${s}">${u.txt}</span>`;
+    };
+    const brandBlock = (b) => {
+      const items = [...brands[b]].sort((x, y) => daysLeft(x.expiry || '2099-12-31') - daysLeft(y.expiry || '2099-12-31'));
       const meta = vTypeMeta(items[0]);
       const count = items.length;
       const remaining = items.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
       const exps = items.map((v) => v.expiry).filter(Boolean).sort();
-      const soonest = exps[0];
-      const u = soonest ? urgency(soonest) : null;
+      const u = exps[0] ? urgency(exps[0]) : null;
       const color = meta.color;
       const char = (b || '商').slice(0, 1);
-      return `<div class="card ic-card clickable" style="height:auto;min-height:74px;margin-bottom:8px;border-left:4px solid ${color};padding:10px 12px" data-action="voucherBrand" data-brand="${esc(b)}">
-        <div class="ic-card-left">
-          <div class="ic-card-logo" style="width:40px;height:40px;min-width:40px;background:${color}15;border-color:${color}30">
-            <span style="font-size:18px;font-weight:700;color:${color}">${esc(char)}</span>
+      const collapsed = !!voucherCollapsed[b];
+      return `<div class="vb-card">
+        <div class="vb-head clickable" data-action="vb-toggle" data-brand="${esc(b)}">
+          <div class="vb-logo" style="background:${color}15;color:${color}">${esc(char)}</div>
+          <div class="vb-info">
+            <div class="vb-name">${esc(b)}</div>
+            <div class="vb-meta">${count} 张券${u ? ' · ' + expPill(u) : ''}</div>
           </div>
-          <div class="ic-card-info" style="gap:3px;flex:1;min-width:0">
-            <div class="ic-card-name" style="color:var(--txt);font-size:15px;font-weight:600">${esc(b)}</div>
-            <div class="ic-card-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-              <span class="ic-card-tag" style="background:var(--bg3);color:var(--txt2);font-size:10px">${count} 张券</span>
-              ${u ? `<span class="ic-card-expiry ${u.level === 'urgent' ? 'urgent' : u.level === 'soon' ? 'warn' : 'ok'}" style="font-size:10px;padding:1px 6px">${u.txt}</span>` : ''}
-            </div>
-          </div>
+          <button class="vb-add" data-action="add-voucher-brand" data-brand="${esc(b)}" aria-label="添加${esc(b)}的券"><span class="ms">add</span></button>
+          <span class="vb-arrow ms">${collapsed ? 'expand_more' : 'expand_less'}</span>
         </div>
-        <div class="ic-card-right" style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
-          <div class="ic-card-value" style="font-size:16px;font-weight:700;color:${color};line-height:1.1">${remaining}<span style="font-size:11px;font-weight:500;color:var(--txt2)"> 次</span></div>
-          <span class="muted" style="font-size:10px">剩余可核销</span>
-        </div>
+        ${collapsed ? '' : `<div class="vb-body">
+          ${items.map(voucherCardHTML).join('')}
+          <button class="vb-addrow" data-action="add-voucher-brand" data-brand="${esc(b)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
+        </div>`}
       </div>`;
     };
     const totalRemaining = state.vouchers.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
@@ -1930,7 +1941,7 @@
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalRemaining}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
     ${emptyHTML}
-    <div style="padding-bottom:88px">${brandNames.map(brandCard).join('')}</div>
+    <div style="padding-bottom:88px">${brandNames.map(brandBlock).join('')}</div>
     <button class="voucher-fab" data-action="add-voucher" aria-label="添加卡/票"><span class="ms">add</span></button>`;
   }
 
@@ -3627,6 +3638,14 @@
       case 'voucherBrand':
         navigate('voucherBrand', el.dataset.brand);
         break;
+      case 'vb-toggle': {
+        const b = el.dataset.brand;
+        if (!b) break;
+        if (voucherCollapsed[b]) delete voucherCollapsed[b];
+        else voucherCollapsed[b] = true;
+        rerender();
+        break;
+      }
       case 'voucher-use': {
         const v = state.vouchers.find((x) => x.id === el.dataset.id);
         if (!v) break;
