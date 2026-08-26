@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>权益与羊毛管理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=2.15.70" />
+</head>
+<body>
+  <div id="app">
+    <!-- Page content -->
+    <main id="page" class="page"></main>
+
+    <!-- Bottom tab bar (6 items) -->
+    <nav class="navbar" id="tabbar">
+      <button class="nav-item active" data-action="tab" data-tab="home" data-name="home">
+        <span class="ms">home</span>
+        <span class="nav-label">首页</span>
+      </button>
+      <button class="nav-item" data-action="tab" data-tab="voucher" data-name="vouchers">
+        <span class="ms">confirmation_number</span>
+        <span class="nav-label">卡/票</span>
+      </button>
+      <button class="nav-item" data-action="tab" data-tab="credit" data-name="creditcards">
+        <span class="ms">credit_card</span>
+        <span class="nav-label">信用卡</span>
+      </button>
+      <button class="nav-item" data-action="tab" data-tab="assets" data-name="assets">
+        <span class="ms">account_balance_wallet</span>
+        <span class="nav-label">资产</span>
+      </button>
+      <button class="nav-item" data-action="tab" data-tab="knowledge" data-name="knowledge">
+        <span class="ms">menu_book</span>
+        <span class="nav-label">知识库</span>
+      </button>
+      <button class="nav-item" data-action="tab" data-tab="profile" data-name="settings">
+        <span class="ms">person</span>
+        <span class="nav-label">我的</span>
+      </button>
+    </nav>
+
+    <!-- Floating back button (visible on sub-pages) -->
+    <button id="floatBack" data-action="back"><span class="ms">arrow_back</span></button>
+  </div>
+
+  <!-- Modal host -->
+  <div id="modalHost"></div>
+  <!-- Toast host -->
+  <div id="toastHost"></div>
+
+  <script src="app.js?v=2.15.70"></script>
+</body>
+</html>
