@@ -233,8 +233,13 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.72';
+  const APP_VERSION = '2.15.73';
   const CHANGELOG = [
+    { v: '2.15.73', date: '2026-08-27', tag: '优化', head: '卡/票：添加按钮精致化 + 已用完状态 + 集中使用记录', items: [
+      '「添加券 / 添加商家」改为小号圆角按钮（原先全宽虚线大按钮显笨重），大小统一居中',
+      '用完的券整行变灰并标注「已用完」，剩余次数显示 0；商家头同步显示「剩 X 次」（0 次灰色）',
+      '新增「使用记录」页（卡/票顶栏时钟图标进入）：汇总所有券的使用/退回流水，按时间倒序，可左滑删除单条',
+    ]},
     { v: '2.15.72', date: '2026-08-27', tag: '优化', head: '卡/票：修复图标显示 + 加号与核销交互调整', items: [
       '修复券卡片图标显示异常（replay/confirmation_number 等字符漂浮）：补回 Material 图标字体类',
       '券行左右留白加大，内容不再贴边',
@@ -953,6 +958,7 @@
       case 'vouchers': html = renderVouchers(); break;
       case 'voucherDetail': html = renderVoucherDetail(r.param); break;
       case 'voucherBrand': html = renderVoucherBrand(r.param); break;
+      case 'voucherHistory': html = renderVoucherHistory(); break;
       case 'knowledgeDetail': html = renderKnowledgeDetail(r.param); break;
       case 'knowledge':
       case 'knowledgeSummary': html = renderKnowledgeSummary(); break;
@@ -974,7 +980,7 @@
       home: 'home', countdown: 'home', mergeDetail: 'home',
       assets: 'assets', membershipDetail: 'assets',
       creditcards: 'credit', creditDetail: 'credit',
-      vouchers: 'voucher', voucherDetail: 'voucher', voucherBrand: 'voucher',
+      vouchers: 'voucher', voucherDetail: 'voucher', voucherBrand: 'voucher', voucherHistory: 'voucher',
       knowledge: 'knowledge', knowledgeSummary: 'knowledge', knowledgeDetail: 'knowledge',
       knowledgeSubs: 'knowledge', knowledgePurchases: 'knowledge',
       knowledgeExpiry: 'knowledge',
@@ -1030,6 +1036,7 @@
       case 'vouchers': html = renderVouchers(); setActiveTab('voucher'); break;
       case 'voucherDetail': html = renderVoucherDetail(param); setActiveTab('voucher'); break;
       case 'voucherBrand': html = renderVoucherBrand(param); setActiveTab('voucher'); break;
+      case 'voucherHistory': html = renderVoucherHistory(); setActiveTab('voucher'); break;
       case 'knowledgeDetail': html = renderKnowledgeDetail(param); setActiveTab('knowledge'); break;
       case 'knowledge':
       case 'knowledgeSummary': html = renderKnowledgeSummary(); setActiveTab('knowledge'); break;
@@ -1864,16 +1871,17 @@
   function voucherCardHTML(v) {
     const u = urgency(v.expiry);
     const remaining = v.totalUses - v.usedUses;
+    const done = remaining <= 0;
     const meta = vTypeMeta(v);
     const expStyle = u.level === 'urgent'
       ? 'background:#dc26261a;color:#dc2626;border:1px solid #dc26263d'
       : u.level === 'soon'
         ? 'background:#d977061a;color:#b45309;border:1px solid #d977063d'
         : 'background:var(--bg3);color:var(--txt2);border:1px solid var(--ol)';
-    return `<div class="vc-row clickable" data-action="detail" data-kind="voucher" data-id="${v.id}">
+    return `<div class="vc-row clickable ${done ? 'vc-done' : ''}" data-action="detail" data-kind="voucher" data-id="${v.id}">
       <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
       <div class="vc-main">
-        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span></div>
+        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${done ? '<span class="vc-tag vc-usedup">已用完</span>' : ''}</div>
         <div class="vc-meta">
           <span class="vc-exp" style="${expStyle}">${u.txt}</span>
           ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
@@ -1881,10 +1889,10 @@
       </div>
       <div class="vc-right">
         <div class="vc-btns">
-          <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${remaining <= 0 ? 'disabled' : ''}>使用</button>
+          <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${done ? 'disabled' : ''}>使用</button>
           <button class="vc-btn vc-back" data-action="voucher-use-dec" data-id="${v.id}" ${v.usedUses <= 0 ? 'disabled' : ''}>回退</button>
         </div>
-        <span class="vc-val">${remaining}<em>/${v.totalUses}</em></span>
+        <span class="vc-val">${done ? '<span style="color:var(--txt2)">0</span>' : remaining}<em>/${v.totalUses}</em></span>
       </div>
     </div>`;
   }
@@ -1953,14 +1961,14 @@
           <div class="vb-logo" style="background:${color}15;color:${color}">${esc(char)}</div>
           <div class="vb-info">
             <div class="vb-name">${esc(b)}</div>
-            <div class="vb-meta">${count} 张券${u ? ' · ' + expPill(u) : ''}</div>
+            <div class="vb-meta">${count} 张券 · 剩 <span class="${remaining > 0 ? 'vb-rem' : 'vb-rem vb-rem-zero'}">${remaining}</span> 次${u ? ' · ' + expPill(u) : ''}</div>
           </div>
           <span class="vb-arrow ms">${collapsed ? 'expand_more' : 'expand_less'}</span>
         </div>
         ${collapsed ? '' : `<div class="vb-body">
           ${items.map(voucherCardHTML).join('')}
           ${formOpen ? voucherAddFormHTML(b) : ''}
-          <button class="vb-addrow" data-action="va-open" data-brand="${esc(b)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
+          <button class="vb-addrow" data-action="va-open" data-brand="${esc(b)}"><span class="ms" style="font-size:14px">add</span> 添加券</button>
         </div>`}
       </div>`;
     };
@@ -1968,7 +1976,7 @@
     const expiringCount = state.vouchers.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
     const emptyHTML = state.vouchers.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">暂无卡/票，点下方「添加商家」开始</div>';
     const newBrandForm = (vAddForm && vAddForm.brand === '') ? voucherAddFormHTML('') : '';
-    return `${tabTop('卡 / 票', '')}
+    return `${tabTop('卡 / 票', `<button class="topbar-act" data-action="voucher-history" aria-label="使用记录"><span class="ms">history</span></button>`)}
     <div class="card" style="padding:12px var(--mx);margin:4px var(--mx) 8px;display:flex;gap:8px;justify-content:space-around;text-align:center">
       <div><div class="num-hero" style="font-size:20px;margin:0">${state.vouchers.length}</div><div class="muted" style="font-size:11px">全部券</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--warn)">${expiringCount}</div><div class="muted" style="font-size:11px">即将到期</div></div>
@@ -2001,6 +2009,43 @@
       <button class="vb-addrow" data-action="va-open" data-brand="${esc(brand)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
     </div>
     <div style="height:20px"></div>`;
+  }
+
+  /* 集中使用记录：所有券的核销/回退流水，按时间倒序 */
+  function renderVoucherHistory() {
+    const rows = [];
+    state.vouchers.forEach((v) => {
+      (v.transactions || []).forEach((tx) => { rows.push({ v, tx }); });
+    });
+    rows.sort((a, b) => parse(b.tx.date) - parse(a.tx.date));
+    const rowHTML = (r) => {
+      const { v, tx } = r;
+      const meta = vTypeMeta(v);
+      const isUse = tx.kind === 'use';
+      return `<div class="swipe" data-swipe>
+        <div class="swipe-actions">
+          <button class="swipe-btn del" data-action="voucher-txn-del" data-id="${v.id}" data-txid="${tx.id}">删除</button>
+        </div>
+        <div class="swipe-front row-compact">
+          <div class="rc-dot ${isUse ? 'minus' : 'plus'}">${isUse ? '－' : '＋'}</div>
+          <div class="rc-main">
+            <div class="rc-title">${esc(v.name)}<span class="muted" style="font-size:11px;margin-left:6px">${esc(v.brand || '')} · ${meta.l}</span></div>
+            <div class="rc-sub">${isUse ? '使用' : '退回'} · ${fmtDateTime(tx.date)}</div>
+          </div>
+        </div>
+      </div>`;
+    };
+    const txnCount = rows.length;
+    const useCount = rows.filter((r) => r.tx.kind === 'use').length;
+    return `${hdr('使用记录', '')}
+    <div class="card" style="padding:12px var(--mx);margin:4px var(--mx) 8px;display:flex;gap:8px;justify-content:space-around;text-align:center">
+      <div><div class="num-hero" style="font-size:18px;margin:0">${txnCount}</div><div class="muted" style="font-size:11px">总记录</div></div>
+      <div><div class="num-hero" style="font-size:18px;margin:0;color:var(--t)">${useCount}</div><div class="muted" style="font-size:11px">使用</div></div>
+      <div><div class="num-hero" style="font-size:18px;margin:0;color:var(--txt2)">${txnCount - useCount}</div><div class="muted" style="font-size:11px">退回</div></div>
+    </div>
+    <div class="card" style="padding:4px 0">
+      ${rows.length ? rows.map(rowHTML).join('') : '<div class="muted text-center" style="padding:30px;font-size:14px">暂无使用记录，核销后自动生成</div>'}
+    </div>`;
   }
 
   function renderVoucherDetail(id) {
@@ -3675,6 +3720,9 @@
         break;
       case 'voucherBrand':
         navigate('voucherBrand', el.dataset.brand);
+        break;
+      case 'voucher-history':
+        navigate('voucherHistory');
         break;
       case 'vb-toggle': {
         const b = el.dataset.brand;
