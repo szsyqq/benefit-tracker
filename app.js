@@ -233,8 +233,15 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.71';
+  const APP_VERSION = '2.15.72';
   const CHANGELOG = [
+    { v: '2.15.72', date: '2026-08-27', tag: '优化', head: '卡/票：修复图标显示 + 加号与核销交互调整', items: [
+      '修复券卡片图标显示异常（replay/confirmation_number 等字符漂浮）：补回 Material 图标字体类',
+      '券行左右留白加大，内容不再贴边',
+      '取消右下角悬浮加号与商家头加号，只保留卡片底部居中的「添加券」，避免加号重复',
+      '「添加券」改为就地展开内联表单（非底部弹窗），在哪里点就在哪里填；列表末尾「添加商家」新建品牌',
+      '核销按钮改回「使用 / 回退」两个按钮，可分别核销与撤销',
+    ]},
     { v: '2.15.71', date: '2026-08-27', tag: '优化', head: '卡/票：商家折叠分组 + 标签卡片样式', items: [
       '商家卡片支持折叠/展开，展开后直接看到该商家各种券（带缩进、小标签）',
       '标签改为 pill 卡片样式，去掉左侧颜色线，类型/到期/适用范围用色块区分',
@@ -1853,7 +1860,7 @@
    *  Track usage-based cards and tickets (e.g. 喜茶卡, 咖啡券)
    * ============================================================ */
   /* 单张券卡片 —— 折叠列表内复用。无颜色线，类型/到期用 pill 标签卡片区分；
-     「＋1 使用」不包 stopPropagation，靠全局委托 closest 命中按钮自身 data-action，可正常点击核销 */
+     核销用「使用/回退」两个按钮，靠全局委托 closest 命中按钮自身 data-action */
   function voucherCardHTML(v) {
     const u = urgency(v.expiry);
     const remaining = v.totalUses - v.usedUses;
@@ -1864,7 +1871,7 @@
         ? 'background:#d977061a;color:#b45309;border:1px solid #d977063d'
         : 'background:var(--bg3);color:var(--txt2);border:1px solid var(--ol)';
     return `<div class="vc-row clickable" data-action="detail" data-kind="voucher" data-id="${v.id}">
-      <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}">${meta.icon}</div>
+      <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
       <div class="vc-main">
         <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span></div>
         <div class="vc-meta">
@@ -1873,14 +1880,39 @@
         </div>
       </div>
       <div class="vc-right">
+        <div class="vc-btns">
+          <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${remaining <= 0 ? 'disabled' : ''}>使用</button>
+          <button class="vc-btn vc-back" data-action="voucher-use-dec" data-id="${v.id}" ${v.usedUses <= 0 ? 'disabled' : ''}>回退</button>
+        </div>
         <span class="vc-val">${remaining}<em>/${v.totalUses}</em></span>
-        <button class="vc-use" data-action="voucher-use" data-id="${v.id}" ${remaining <= 0 ? 'disabled' : ''}>＋1 使用</button>
       </div>
     </div>`;
   }
 
   /* 折叠状态：品牌 → true 表示收起（默认展开） */
   let voucherCollapsed = {};
+  /* 内联添加表单：null 关闭；{brand: ''} 新建商家；{brand: '喜茶'} 该商家下添加券 */
+  let vAddForm = null;
+
+  /* 内联添加表单（就地展开，非弹窗）。brand 为空 = 新建商家，带品牌输入框 */
+  function voucherAddFormHTML(brand) {
+    const isNew = !brand;
+    return `<div class="va-form">
+      ${isNew ? '<div class="field"><label>品牌 <small style="color:var(--err)">*</small></label><input id="va_brand" placeholder="如 瑞幸 / 星巴克"></div>' : ''}
+      <div class="field" style="margin-top:8px"><label>名称 <small style="color:var(--err)">*</small></label><input id="va_name" placeholder="如 满减券 / 2次卡"></div>
+      <div class="field"><label>类型</label>${voucherTypeSeg('coupon')}</div>
+      <div class="flex gap-sm">
+        <div class="field" style="flex:1"><label>总次数</label><input id="va_uses" type="number" value="1"></div>
+        <div class="field" style="flex:1"><label>已用次数</label><input id="va_used" type="number" value="0"></div>
+      </div>
+      <div class="field"><label>到期日</label><input id="va_exp" type="date"></div>
+      <div class="field"><label>适用范围（选填）</label><input id="va_scope" placeholder="如 全国门店、限自提、满25可用"></div>
+      <div class="flex gap-sm mt-lg">
+        <button class="btn btn-primary flex main justify-center" data-action="va-save" data-brand="${esc(brand)}">保存</button>
+        <button class="btn btn-ghost flex main justify-center" data-action="va-cancel">取消</button>
+      </div>
+    </div>`;
+  }
 
   /* 一级：商家折叠分组列表 —— 每个商家可展开/收起，展开后直接看到该商家的各种券 */
   function renderVouchers() {
@@ -1915,6 +1947,7 @@
       const color = meta.color;
       const char = (b || '商').slice(0, 1);
       const collapsed = !!voucherCollapsed[b];
+      const formOpen = vAddForm && vAddForm.brand === b;
       return `<div class="vb-card">
         <div class="vb-head clickable" data-action="vb-toggle" data-brand="${esc(b)}">
           <div class="vb-logo" style="background:${color}15;color:${color}">${esc(char)}</div>
@@ -1922,47 +1955,52 @@
             <div class="vb-name">${esc(b)}</div>
             <div class="vb-meta">${count} 张券${u ? ' · ' + expPill(u) : ''}</div>
           </div>
-          <button class="vb-add" data-action="add-voucher-brand" data-brand="${esc(b)}" aria-label="添加${esc(b)}的券"><span class="ms">add</span></button>
           <span class="vb-arrow ms">${collapsed ? 'expand_more' : 'expand_less'}</span>
         </div>
         ${collapsed ? '' : `<div class="vb-body">
           ${items.map(voucherCardHTML).join('')}
-          <button class="vb-addrow" data-action="add-voucher-brand" data-brand="${esc(b)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
+          ${formOpen ? voucherAddFormHTML(b) : ''}
+          <button class="vb-addrow" data-action="va-open" data-brand="${esc(b)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
         </div>`}
       </div>`;
     };
     const totalRemaining = state.vouchers.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
     const expiringCount = state.vouchers.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
-    const emptyHTML = state.vouchers.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">暂无卡/票，点击右下角 ＋ 添加</div>';
-    return `${tabTop('卡 / 票', `<button class="topbar-act" data-action="add-voucher" aria-label="添加卡/票"><span class="ms">add</span></button>`)}
+    const emptyHTML = state.vouchers.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">暂无卡/票，点下方「添加商家」开始</div>';
+    const newBrandForm = (vAddForm && vAddForm.brand === '') ? voucherAddFormHTML('') : '';
+    return `${tabTop('卡 / 票', '')}
     <div class="card" style="padding:12px var(--mx);margin:4px var(--mx) 8px;display:flex;gap:8px;justify-content:space-around;text-align:center">
       <div><div class="num-hero" style="font-size:20px;margin:0">${state.vouchers.length}</div><div class="muted" style="font-size:11px">全部券</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--warn)">${expiringCount}</div><div class="muted" style="font-size:11px">即将到期</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalRemaining}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
     ${emptyHTML}
-    <div style="padding-bottom:88px">${brandNames.map(brandBlock).join('')}</div>
-    <button class="voucher-fab" data-action="add-voucher" aria-label="添加卡/票"><span class="ms">add</span></button>`;
+    <div style="padding-bottom:12px">${brandNames.map(brandBlock).join('')}</div>
+    ${newBrandForm || `<button class="vb-addrow vb-newbrand" data-action="va-open-new"><span class="ms" style="font-size:15px">add</span> 添加商家</button>`}
+    <div style="height:20px"></div>`;
   }
 
-  /* 二级：某商家下的全部券 —— 每种券独立、可单独核销 */
+  /* 二级：某商家下的全部券 —— 每种券独立、可单独核销（保留路由，主列表已改折叠式） */
   function renderVoucherBrand(brand) {
     const items = state.vouchers.filter((v) => (v.brand || v.name) === brand);
     items.sort((a, b) => daysLeft(a.expiry || '2099-12-31') - daysLeft(b.expiry || '2099-12-31'));
     const totalRemaining = items.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
     const expiring = items.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
-    const emptyHTML = items.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">该商家暂无券，点击右上角 ＋ 添加</div>';
+    const formOpen = vAddForm && vAddForm.brand === brand;
+    const emptyHTML = items.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">该商家暂无券</div>';
     return `<div class="topbar">
       <div class="topbar-back"><span class="back-btn ms" data-action="back" style="cursor:pointer">arrow_back</span><span class="topbar-title">${esc(brand)}</span></div>
-      <button class="topbar-act" data-action="add-voucher-brand" data-brand="${esc(brand)}" aria-label="添加该商家券"><span class="ms">add</span></button>
     </div>
     <div class="card" style="padding:12px var(--mx);margin:4px var(--mx) 8px;display:flex;gap:8px;justify-content:space-around;text-align:center">
       <div><div class="num-hero" style="font-size:20px;margin:0">${items.length}</div><div class="muted" style="font-size:11px">券数量</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--warn)">${expiring}</div><div class="muted" style="font-size:11px">即将到期</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalRemaining}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
-    <div style="padding-bottom:88px">${emptyHTML}${items.map(voucherCardHTML).join('')}</div>
-    <button class="voucher-fab" data-action="add-voucher-brand" data-brand="${esc(brand)}" aria-label="添加券"><span class="ms">add</span></button>`;
+    <div class="vb-body" style="margin:0 var(--mx);background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sh-card);padding:6px 12px 12px">${emptyHTML}${items.map(voucherCardHTML).join('')}
+      ${formOpen ? voucherAddFormHTML(brand) : ''}
+      <button class="vb-addrow" data-action="va-open" data-brand="${esc(brand)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
+    </div>
+    <div style="height:20px"></div>`;
   }
 
   function renderVoucherDetail(id) {
@@ -3644,6 +3682,39 @@
         if (voucherCollapsed[b]) delete voucherCollapsed[b];
         else voucherCollapsed[b] = true;
         rerender();
+        break;
+      }
+      case 'va-open':
+        vAddForm = { brand: el.dataset.brand };
+        rerender();
+        break;
+      case 'va-open-new':
+        vAddForm = { brand: '' };
+        rerender();
+        break;
+      case 'va-cancel':
+        vAddForm = null;
+        rerender();
+        break;
+      case 'va-save': {
+        const nameEl = document.getElementById('va_name');
+        const name = (nameEl && nameEl.value.trim()) || '';
+        if (!name) return toast('请输入名称');
+        const brandInput = document.getElementById('va_brand');
+        const brand = (brandInput && brandInput.value.trim()) || el.dataset.brand || '';
+        const segAct = document.querySelector('#vfTypeSeg .opt.active');
+        const type = (segAct && segAct.dataset.vt) || 'coupon';
+        const totalUses = Math.max(1, Number(document.getElementById('va_uses').value) || 1);
+        const usedUses = Math.max(0, Math.min(Number(document.getElementById('va_used').value) || 0, totalUses));
+        const expiry = document.getElementById('va_exp').value || '';
+        const scope = document.getElementById('va_scope').value.trim() || '';
+        const meta = VOUCHER_TYPES[type];
+        state.vouchers.push({
+          id: uid(), name, brand: brand || name, type, totalUses, usedUses, expiry, scope, note: '', color: meta.cat,
+          transactions: [],
+        });
+        vAddForm = null;
+        persist(); rerender(); toast('已添加「' + name + '」');
         break;
       }
       case 'voucher-use': {
