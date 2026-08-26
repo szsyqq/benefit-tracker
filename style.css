@@ -892,7 +892,7 @@ ul, li { list-style: none; }
 }
 .vb-body {
   border-top: 1px solid var(--ol);
-  padding: 4px 12px 10px 20px;   /* 相对商家头缩进 */
+  padding: 6px 16px 12px 24px;   /* 相对商家头缩进，左右留白充足 */
 }
 .vb-addrow {
   width: 100%; margin-top: 2px;
@@ -903,9 +903,14 @@ ul, li { list-style: none; }
   cursor: pointer;
 }
 .vb-addrow:active { background: var(--bg3); }
+.vb-newbrand { margin-top: 8px; padding: 10px 0; font-size: 13px; }
+.va-form {
+  border: 1px dashed var(--ol); border-radius: var(--r-md);
+  background: var(--bg2); padding: 10px 12px; margin: 10px 0;
+}
 .vc-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 0;
+  padding: 10px 0;
   border-bottom: 1px dashed var(--ol);
   background: transparent;
 }
@@ -938,23 +943,24 @@ ul, li { list-style: none; }
   max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .vc-right {
-  flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+  flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
 }
 .vc-val {
   font-size: 14px; font-weight: 700; color: var(--txt);
   font-variant-numeric: tabular-nums; line-height: 1;
 }
 .vc-val em { font-size: 10px; font-weight: 500; color: var(--txt2); font-style: normal; }
-.vc-use {
+.vc-btns { display: flex; gap: 5px; }
+.vc-btn {
   border: none; cursor: pointer;
-  background: linear-gradient(150deg, #e7c25a, #d4af37);
-  color: #3a2c00;
   font-size: 11px; font-weight: 600;
-  padding: 3px 9px; border-radius: 999px;
+  padding: 3px 10px; border-radius: 999px;
   white-space: nowrap;
 }
-.vc-use:active { transform: scale(0.94); }
-.vc-use:disabled { background: var(--bg3); color: var(--txt2); cursor: default; transform: none; }
+.vc-use { background: linear-gradient(150deg, #e7c25a, #d4af37); color: #3a2c00; }
+.vc-back { background: var(--bg3); color: var(--txt2); border: 1px solid var(--ol); }
+.vc-btn:active { transform: scale(0.94); }
+.vc-btn:disabled { background: var(--bg3); color: var(--txt2); cursor: default; transform: none; opacity: .55; }
 
 .cc-mini {
   position: relative; flex: 0 0 auto; width: 200px; aspect-ratio: 1.586 / 1; height: auto;
