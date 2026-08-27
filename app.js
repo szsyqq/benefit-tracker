@@ -233,8 +233,14 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.75';
+  const APP_VERSION = '2.15.76';
   const CHANGELOG = [
+    { v: '2.15.76', date: '2026-08-27', tag: '优化', head: '卡/票：双击改名 + 修复类型切换与边界对齐', items: [
+      '修复内联添加表单的类型分段无法点击（改为全局事件委托，表单/弹窗通用）',
+      '券名、商家名改为双击直接编辑（不再依赖过小的铅笔按钮，已移除小按钮）',
+      '券的编辑/删除移进详情页的「操作」卡片，进入详情保持单击',
+      '券名与标签过长时自动截断，不再超出卡片边界；卡片内对齐更规整',
+    ]},
     { v: '2.15.75', date: '2026-08-27', tag: '优化', head: '卡/票：新增券与商家改名 + 布局与配色微调', items: [
       '每张券名称旁新增编辑按钮（铅笔），可直接改名/改类型/改次数',
       '每个商家名称旁新增编辑按钮，支持修改商家名（同步更新旗下所有券）',
@@ -1895,8 +1901,8 @@
         : 'background:var(--bg3);color:var(--txt2);border:1px solid var(--ol)';
     return `<div class="vc-row clickable ${done ? 'vc-done' : ''}" data-action="detail" data-kind="voucher" data-id="${v.id}">
       <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
-      <div class="vc-main">
-        <div class="vc-name">${esc(v.name)}<button class="vc-edit" data-action="voucher-edit" data-id="${v.id}" aria-label="编辑券"><span class="ms">edit</span></button><span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${done ? '<span class="vc-tag vc-usedup">已用完</span>' : ''}</div>
+      <div class="vc-main" data-dbl-action="voucher-edit" data-id="${v.id}">
+        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${done ? '<span class="vc-tag vc-usedup">已用完</span>' : ''}</div>
         <div class="vc-meta">
           <span class="vc-exp" style="${expStyle}">${u.txt}</span>
           ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
@@ -1985,8 +1991,8 @@
       return `<div class="vb-card">
         <div class="vb-head clickable" data-action="vb-toggle" data-brand="${esc(b)}">
           <div class="vb-logo" style="background:linear-gradient(150deg, ${color}cc, ${color}66);color:#fff">${esc(char)}</div>
-          <div class="vb-info">
-            <div class="vb-name">${esc(b)}<button class="vb-edit" data-action="voucher-brand-edit" data-brand="${esc(b)}" aria-label="修改商家名"><span class="ms">edit</span></button></div>
+          <div class="vb-info" data-dbl-action="voucher-brand-edit" data-brand="${esc(b)}">
+            <div class="vb-name">${esc(b)}</div>
             <div class="vb-meta">${count} 张券 · 剩 <span class="${remaining > 0 ? 'vb-rem' : 'vb-rem vb-rem-zero'}">${remaining}</span> 次${u ? ' · ' + expPill(u) : ''}</div>
           </div>
           <span class="vb-arrow ms">${collapsed ? 'expand_more' : 'expand_less'}</span>
@@ -2103,9 +2109,7 @@
         </div>
       </div>`;
     return `
-    ${hdr(esc(v.name), `
-      <span class="ms topbar-act" style="color:var(--p)" data-action="voucher-edit" data-id="${v.id}">edit</span>
-      <span class="ms topbar-act" style="color:var(--txt2)" data-action="voucher-del" data-id="${v.id}">delete</span>`)}
+    ${hdr(esc(v.name), '')}
 
     <!-- Brand identity -->
     <div class="flex items-center gap-md" style="margin:4px var(--mx) 12px">
@@ -2123,6 +2127,14 @@
       </div>
       ${v.expiry ? `<div class="muted" style="font-size:12px;margin-top:8px">🗓 到期：${v.expiry}</div>` : ''}
       ${v.scope ? `<div class="muted" style="font-size:13px;margin-top:6px;color:var(--txt)">📍 <span class="muted">适用范围：</span>${esc(v.scope)}</div>` : ''}
+    </div>
+
+    <!-- Settings card (edit + delete) -->
+    <div class="card" style="margin:0 var(--mx) 12px;padding:10px 16px">
+      <div class="flex items-center gap-md" style="gap:8px">
+        <button class="btn btn-primary flex main justify-center" style="flex:1;font-size:13px" data-action="voucher-edit" data-id="${v.id}"><span class="ms" style="font-size:16px">edit</span> 编辑</button>
+        <button class="btn btn-ghost flex main justify-center" style="flex:1;font-size:13px;color:#dc2626;border-color:#dc262633" data-action="voucher-del" data-id="${v.id}"><span class="ms" style="font-size:16px">delete</span> 删除</button>
+      </div>
     </div>
 
     <!-- Usage card -->
@@ -2152,10 +2164,10 @@
   /* 类型分段控件 HTML — 供添加/编辑弹窗复用 */
   function voucherTypeSeg(active) {
     const opts = VOUCHER_TYPE_ORDER.map((tk) =>
-      `<div class="opt ${resolveVoucherType({ type: active }) === tk ? 'active' : ''}" data-vt="${tk}">${VOUCHER_TYPES[tk].l}</div>`).join('');
-    return `<div class="seg-ctl" id="vfTypeSeg" style="gap:4px">${opts}</div>`;
+      `<div class="opt ${resolveVoucherType({ type: active }) === tk ? 'active' : ''}" data-vt="${tk}" data-vt-opt data-action="vt-opt">${VOUCHER_TYPES[tk].l}</div>`).join('');
+    return `<div class="seg-ctl" data-vt-seg style="gap:4px">${opts}</div>`;
   }
-  const voucherTypeOf = (root) => root.querySelector('#vfTypeSeg .opt.active').dataset.vt;
+  const voucherTypeOf = () => { const el = document.querySelector('.seg-ctl .opt.active'); return el ? el.dataset.vt : 'coupon'; };
 
   function openVoucherAddSheet(brand) {
     const body = `
@@ -2171,12 +2183,11 @@
       <div class="field"><label>备注（选填）</label><textarea id="vf_note" placeholder="使用条件、兑换方式等"></textarea></div>
       <button class="btn btn-primary btn-block mt-lg" id="vfSubmit">保存</button>`;
     openSheet('添加卡 / 券 / 票', body, (root, _close) => {
-      bindVoucherSeg(root);
       root.querySelector('#vfSubmit').addEventListener('click', () => {
         const name = root.querySelector('#vf_name').value.trim();
         if (!name) return toast('请输入名称');
         const brand = root.querySelector('#vf_brand').value.trim() || name;
-        const type = voucherTypeOf(root);
+        const type = voucherTypeOf();
         const totalUses = Math.max(1, Number(root.querySelector('#vf_uses').value) || 1);
         const usedUses = Math.max(0, Math.min(Number(root.querySelector('#vf_used').value) || 0, totalUses));
         const expiry = root.querySelector('#vf_exp').value || '';
@@ -2189,16 +2200,6 @@
         });
         persist(); closeSheet(); navigate(brand ? 'voucherBrand' : 'vouchers', brand); toast('已添加「' + name + '」');
       });
-    });
-  }
-
-  function bindVoucherSeg(root) {
-    const seg = root.querySelector('#vfTypeSeg');
-    if (!seg) return;
-    seg.addEventListener('click', (e) => {
-      const o = e.target.closest('.opt'); if (!o) return;
-      seg.querySelectorAll('.opt').forEach((el) => el.classList.remove('active'));
-      o.classList.add('active');
     });
   }
 
@@ -2218,12 +2219,11 @@
       <div class="field"><label>备注（选填）</label><textarea id="vf_note">${esc(v.note || '')}</textarea></div>
       <button class="btn btn-primary btn-block mt-lg" id="vfSubmit">保存修改</button>`;
     openSheet('编辑卡 / 券 / 票', body, (root) => {
-      bindVoucherSeg(root);
       root.querySelector('#vfSubmit').addEventListener('click', () => {
         const name = root.querySelector('#vf_name').value.trim();
         if (!name) return toast('请输入名称');
         const brand = root.querySelector('#vf_brand').value.trim() || name;
-        const type = voucherTypeOf(root);
+        const type = voucherTypeOf();
         const totalUses = Math.max(1, Number(root.querySelector('#vf_uses').value) || 1);
         const usedUses = Math.max(0, Math.min(Number(root.querySelector('#vf_used').value) || 0, totalUses));
         const expiry = root.querySelector('#vf_exp').value || '';
@@ -3775,6 +3775,14 @@
         vAddForm = { brand: '' };
         rerender();
         break;
+      // 类型分段控件（内联表单/弹窗通用）
+      case 'vt-opt': {
+        const seg = el.closest('[data-vt-seg]');
+        if (!seg) break;
+        seg.querySelectorAll('[data-vt-opt]').forEach((x) => x.classList.remove('active'));
+        el.classList.add('active');
+        break;
+      }
       case 'va-cancel':
         vAddForm = null;
         rerender();
@@ -3795,8 +3803,7 @@
         const nameEl = document.getElementById('va_name');
         const name = (nameEl && nameEl.value.trim()) || '';
         if (!name) return toast('请输入名称');
-        const segAct = document.querySelector('#vfTypeSeg .opt.active');
-        const type = (segAct && segAct.dataset.vt) || 'coupon';
+        const type = voucherTypeOf();
         const totalUses = Math.max(1, Number(document.getElementById('va_uses').value) || 1);
         const usedUses = Math.max(0, Math.min(Number(document.getElementById('va_used').value) || 0, totalUses));
         const expiry = document.getElementById('va_exp').value || '';
@@ -4048,6 +4055,33 @@
       case 'changelog':
         openChangelogSheet();
         break;
+    }
+  });
+
+  /* Double-click gesture: 券名/商家名上双击直接编辑 */
+  document.addEventListener('dblclick', (e) => {
+    const el = e.target.closest('[data-dbl-action]');
+    if (!el) return;
+    const act = el.dataset.dblAction;
+    const id = el.dataset.id;
+    const brand = el.dataset.brand;
+    if (act === 'voucher-edit' && id) openVoucherEditSheet(state.vouchers.find((x) => x.id === id));
+    else if (act === 'voucher-brand-edit' && brand) {
+      const oldName = brand;
+      openSheet('修改商家名', `
+        <div class="field" style="margin:8px 0"><label>商家名</label><input id="vbe_name" value="${esc(oldName)}" placeholder="如 喜茶 / 瑞幸"></div>
+        <button class="btn btn-primary btn-block mt-lg" id="vbeSave">保存</button>`, (root) => {
+        root.querySelector('#vbeSave').addEventListener('click', () => {
+          const nn = root.querySelector('#vbe_name').value.trim();
+          if (!nn) return toast('请输入商家名');
+          if (nn !== oldName) {
+            const vb = state.voucherBrands.find((x) => x.name === oldName);
+            if (vb) vb.name = nn;
+            state.vouchers.forEach((x) => { if ((x.brand || x.name) === oldName) x.brand = nn; });
+            persist(); closeSheet(); rerender(); toast('商家已改名');
+          } else closeSheet();
+        });
+      });
     }
   });
 
