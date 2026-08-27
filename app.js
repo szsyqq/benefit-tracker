@@ -79,22 +79,20 @@
   const initials = (name) => name.replace(/[^\u4e00-\u9fa5A-Za-z]/g, '').slice(0, 2) || '资';
 
   /* ─── 卡券类型体系 (vouchers) ───────────────────────────────
-     legacy 数据里 type 只有 'card'(卡) / 'ticket'(票)。为支持「每张券
-     独立区分类型分组、单独核销」扩展为 4 类，并向后兼容旧值：
-       cyclecard  次卡       (旧 card, 按次数累计)
-       storedcard 储值卡     (按金额余额，次数固定 1，通过余额记录)
-       coupon     券/票      (旧 ticket, 单次或多次)
-       movie      票(影票等)
-     resolveVoucherType(v) 兼容旧 type 与新 type，保证旧数据不丢失。 */
+     v2.15.79 起收敛为三类，旧数据的 cyclecard/movie/card/ticket 统一
+     经 resolveVoucherType 映射到 coupon（次数口径），不丢失数据：
+       coupon     优惠券   (按次数：总次数 / 已用)
+       storedcard 储值卡   (按金额：余额，消费 / 退款改余额)
+       fullred    满减券   (按次数 + 满X减Y 规则)
+     vMode(v) 返回 'count' | 'amount'，驱动输入字段与核销方式的不同。 */
   const VOUCHER_TYPES = {
-    cyclecard:  { l: '次卡',   icon: 'replay',            color: '#0891b2', cat: 'ecard' },
-    storedcard: { l: '储值卡', icon: 'account_balance_wallet', color: '#2563eb', cat: 'ecard' },
-    coupon:     { l: '券',     icon: 'confirmation_number',   color: '#dc2626', cat: 'dining' },
-    movie:      { l: '票',     icon: 'local_activity',        color: '#7c3aed', cat: 'travel' },
+    coupon:     { l: '优惠券', icon: 'confirmation_number', color: '#dc2626', cat: 'dining',  mode: 'count' },
+    storedcard: { l: '储值卡', icon: 'account_balance_wallet', color: '#2563eb', cat: 'ecard', mode: 'amount' },
+    fullred:    { l: '满减券', icon: 'sell', color: '#ea580c', cat: 'shopping', mode: 'count', rule: true },
   };
-  const VOUCHER_TYPE_ORDER = ['cyclecard', 'storedcard', 'coupon', 'movie'];
-  // 旧值映射：card → 次卡 / ticket → 券
-  const VOUCHER_TYPE_LEGACY = { card: 'cyclecard', ticket: 'coupon' };
+  const VOUCHER_TYPE_ORDER = ['coupon', 'storedcard', 'fullred'];
+  // 旧值兼容：次卡 / 票 / 卡 / 券 统一归为 优惠券（次数口径），不丢失数据
+  const VOUCHER_TYPE_LEGACY = { cyclecard: 'coupon', movie: 'coupon', card: 'coupon', ticket: 'coupon' };
   const resolveVoucherType = (v) => {
     const t = v && v.type;
     if (VOUCHER_TYPES[t]) return t;
@@ -102,6 +100,12 @@
     return 'coupon';
   };
   const vTypeMeta = (v) => VOUCHER_TYPES[resolveVoucherType(v)];
+  const vMode = (v) => (VOUCHER_TYPES[resolveVoucherType(v)] || {}).mode || 'count';
+  // 添加 / 编辑表单中，某类型需要展示的字段组（count=次数，amount=余额，rule=满减规则）
+  const FIELDS_FOR_TYPE = { coupon: ['count'], storedcard: ['amount'], fullred: ['count', 'rule'] };
+  // 卡片主数值：次数口径=剩余次数；金额口径=当前余额
+  const vRemaining = (v) => vMode(v) === 'amount' ? (Number(v.balance) || 0) : ((v.totalUses || 0) - (v.usedUses || 0));
+  const vDashValue = (v) => vRemaining(v);
 
   /* ─── Benefit tag system (replaces keyword-based benefitKind) ─── */
   let BENEFIT_TAGS = [
@@ -233,8 +237,15 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.78';
+  const APP_VERSION = '2.15.79';
   const CHANGELOG = [
+    { v: '2.15.79', date: '2026-08-28', tag: '重构', head: '卡/票：类型收敛为三类 + 类型专属输入/核销', items: [
+      '类型由 4 类收敛为 优惠券 / 储值卡 / 满减券 三类（旧数据自动兼容映射到优惠券）',
+      '添加/编辑表单按类型展示不同字段：优惠券=总次数/已用，储值卡=初始余额，满减券=满X减Y',
+      '切换类型时就地显示/隐藏对应字段，不再跳转、不丢失已输入内容',
+      '移除券详情页：单击券不再进详情页；使用记录统一集中在顶部「使用记录」页',
+      '储值卡卡片显示余额，提供「消费/退款」按钮（输入金额改余额并记流水）；优惠券/满减券仍按次使用/回退',
+    ]},
     { v: '2.15.76', date: '2026-08-27', tag: '优化', head: '卡/票：双击改名 + 修复类型切换与边界对齐', items: [
       '修复内联添加表单的类型分段无法点击（改为全局事件委托，表单/弹窗通用）',
       '券名、商家名改为双击直接编辑（不再依赖过小的铅笔按钮，已移除小按钮）',
@@ -1004,9 +1015,8 @@
       case 'creditDetail': html = renderCreditDetail(r.param); break;
       case 'membershipDetail': html = renderMembershipDetail(r.param); break;
       case 'vouchers': html = renderVouchers(); break;
-      case 'voucherDetail': html = renderVoucherDetail(r.param); break;
-      case 'voucherBrand': html = renderVoucherBrand(r.param); break;
       case 'voucherHistory': html = renderVoucherHistory(); break;
+      case 'voucherBrand': html = renderVoucherBrand(r.param); break;
       case 'knowledgeDetail': html = renderKnowledgeDetail(r.param); break;
       case 'knowledge':
       case 'knowledgeSummary': html = renderKnowledgeSummary(); break;
@@ -1028,7 +1038,7 @@
       home: 'home', countdown: 'home', mergeDetail: 'home',
       assets: 'assets', membershipDetail: 'assets',
       creditcards: 'credit', creditDetail: 'credit',
-      vouchers: 'voucher', voucherDetail: 'voucher', voucherBrand: 'voucher', voucherHistory: 'voucher',
+      vouchers: 'voucher', voucherBrand: 'voucher', voucherHistory: 'voucher',
       knowledge: 'knowledge', knowledgeSummary: 'knowledge', knowledgeDetail: 'knowledge',
       knowledgeSubs: 'knowledge', knowledgePurchases: 'knowledge',
       knowledgeExpiry: 'knowledge',
@@ -1082,7 +1092,6 @@
       case 'membershipDetail': html = renderMembershipDetail(param); setActiveTab('assets'); break;
       case 'creditcards': html = renderCreditCards(); setActiveTab('credit'); break;
       case 'vouchers': html = renderVouchers(); setActiveTab('voucher'); break;
-      case 'voucherDetail': html = renderVoucherDetail(param); setActiveTab('voucher'); break;
       case 'voucherBrand': html = renderVoucherBrand(param); setActiveTab('voucher'); break;
       case 'voucherHistory': html = renderVoucherHistory(); setActiveTab('voucher'); break;
       case 'knowledgeDetail': html = renderKnowledgeDetail(param); setActiveTab('knowledge'); break;
@@ -1241,7 +1250,7 @@
     const items = [];
     state.memberships.forEach((m) => items.push({ kind: 'membership', id: m.id, name: m.name, cat: m.category, expiry: m.expiry, value: m.balance }));
     state.knowledge.forEach((k) => items.push({ kind: 'knowledge', id: k.id, name: k.title, cat: k.category, expiry: k.expiry, value: k.price }));
-    state.vouchers.forEach((v) => items.push({ kind: 'voucher', id: v.id, name: v.name, cat: v.color, expiry: v.expiry, value: v.totalUses - v.usedUses }));
+    state.vouchers.forEach((v) => items.push({ kind: 'voucher', id: v.id, name: v.name, cat: v.color, expiry: v.expiry, value: vDashValue(v) }));
     state.creditCards.forEach((c) => c.benefits.forEach((b) => {
       if (b.used < b.total) items.push({ kind: 'credit', id: c.id, name: b.name, cat: 'credit', expiry: null, value: b.value });
     }));
@@ -1421,7 +1430,7 @@
     const totalBenefits = state.creditCards.reduce((s, c) => s + c.benefits.length, 0);
     const tOv = totals();
     const totalKnowledge = state.knowledge.reduce((s, k) => s + (k.price || 0), 0);
-    const totalVoucherRemaining = state.vouchers.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
+    const totalVoucherRemaining = state.vouchers.filter((v) => vMode(v) === 'count').reduce((s, v) => s + ((v.totalUses || 0) - (v.usedUses || 0)), 0);
 
     const notifs = notifyItems();
     const tlCls = { urgent: 'urgent', warn: 'warn', info: 'info', ok: 'ok' };
@@ -1918,29 +1927,46 @@
      核销用「使用/回退」两个按钮，靠全局委托 closest 命中按钮自身 data-action */
   function voucherCardHTML(v) {
     const u = urgency(v.expiry);
-    const remaining = v.totalUses - v.usedUses;
-    const done = remaining <= 0;
     const meta = vTypeMeta(v);
+    const isAmt = vMode(v) === 'amount';
+    const bal = Number(v.balance) || 0;
     const expStyle = u.level === 'urgent'
       ? 'background:#dc26261a;color:#dc2626;border:1px solid #dc26263d'
       : u.level === 'soon'
         ? 'background:#d977061a;color:#b45309;border:1px solid #d977063d'
         : 'background:var(--bg3);color:var(--txt2);border:1px solid var(--ol)';
-    return `<div class="vc-row clickable ${done ? 'vc-done' : ''}" data-action="detail" data-kind="voucher" data-id="${v.id}">
+    let btns, valHTML, extraTag;
+    if (isAmt) {
+      const zero = bal <= 0;
+      valHTML = `<span class="vc-val" style="${zero ? 'color:var(--txt2)' : ''}">¥${bal}</span>`;
+      btns = `<div class="vc-btns">
+        <button class="vc-btn vc-use" data-action="voucher-use-amt" data-id="${v.id}">消费</button>
+        <button class="vc-btn vc-back" data-action="voucher-use-dec-amt" data-id="${v.id}" ${zero ? 'disabled' : ''}>退款</button>
+      </div>`;
+      extraTag = zero ? '<span class="vc-tag vc-usedup">余额为0</span>' : '';
+    } else {
+      const remaining = (v.totalUses || 0) - (v.usedUses || 0);
+      const done = remaining <= 0;
+      const ruleTxt = meta.rule && v.threshold ? `<span class="vc-tag" style="background:#ea580c18;color:#ea580c">满${v.threshold}减${v.discount}</span>` : '';
+      valHTML = `<span class="vc-val">${done ? '<span style="color:var(--txt2)">0</span>' : remaining}<em>/${v.totalUses}</em></span>`;
+      btns = `<div class="vc-btns">
+        <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${done ? 'disabled' : ''}>使用</button>
+        <button class="vc-btn vc-back" data-action="voucher-use-dec" data-id="${v.id}" ${v.usedUses <= 0 ? 'disabled' : ''}>回退</button>
+      </div>`;
+      extraTag = ruleTxt;
+    }
+    return `<div class="vc-row clickable ${isAmt && bal <= 0 ? 'vc-done' : ''}" data-kind="voucher" data-id="${v.id}">
       <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
       <div class="vc-main" data-dbl-action="voucher-edit" data-id="${v.id}">
-        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${done ? '<span class="vc-tag vc-usedup">已用完</span>' : ''}</div>
+        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${extraTag}</div>
         <div class="vc-meta">
           <span class="vc-exp" style="${expStyle}">${u.txt}</span>
           ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
         </div>
       </div>
       <div class="vc-right">
-        <div class="vc-btns">
-          <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${done ? 'disabled' : ''}>使用</button>
-          <button class="vc-btn vc-back" data-action="voucher-use-dec" data-id="${v.id}" ${v.usedUses <= 0 ? 'disabled' : ''}>回退</button>
-        </div>
-        <span class="vc-val">${done ? '<span style="color:var(--txt2)">0</span>' : remaining}<em>/${v.totalUses}</em></span>
+        ${btns}
+        ${valHTML}
       </div>
     </div>`;
   }
@@ -1965,9 +1991,20 @@
     return `<div class="va-form">
       <div class="field" style="margin-top:0"><label>名称 <small style="color:var(--err)">*</small></label><input id="va_name" placeholder="如 满减券 / 2次卡"></div>
       <div class="field"><label>类型</label>${voucherTypeSeg('coupon')}</div>
-      <div class="flex gap-sm">
-        <div class="field" style="flex:1"><label>总次数</label><input id="va_uses" type="number" value="1"></div>
-        <div class="field" style="flex:1"><label>已用次数</label><input id="va_used" type="number" value="0"></div>
+      <div class="va-fields" data-fields="count">
+        <div class="flex gap-sm">
+          <div class="field" style="flex:1"><label>总次数</label><input id="va_uses" type="number" value="1"></div>
+          <div class="field" style="flex:1"><label>已用次数</label><input id="va_used" type="number" value="0"></div>
+        </div>
+      </div>
+      <div class="va-fields" data-fields="amount" hidden>
+        <div class="field"><label>初始余额（元）</label><input id="va_balance" type="number" value="0" min="0"></div>
+      </div>
+      <div class="va-fields" data-fields="rule" hidden>
+        <div class="flex gap-sm">
+          <div class="field" style="flex:1"><label>满（元）</label><input id="va_thr" type="number" value="0" min="0"></div>
+          <div class="field" style="flex:1"><label>减（元）</label><input id="va_dis" type="number" value="0" min="0"></div>
+        </div>
       </div>
       <div class="field"><label>到期日</label><input id="va_exp" type="date"></div>
       <div class="field"><label>适用范围（选填）</label><input id="va_scope" placeholder="如 全国门店、限自提、满25可用"></div>
@@ -2007,7 +2044,8 @@
       const items = [...brands[b]].sort((x, y) => daysLeft(x.expiry || '2099-12-31') - daysLeft(y.expiry || '2099-12-31'));
       const meta = items.length ? vTypeMeta(items[0]) : VOUCHER_TYPES.coupon;
       const count = items.length;
-      const remaining = items.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
+      const countRem = items.filter((v) => vMode(v) === 'count').reduce((s, v) => s + ((v.totalUses || 0) - (v.usedUses || 0)), 0);
+      const storedSum = items.filter((v) => vMode(v) === 'amount').reduce((s, v) => s + (Number(v.balance) || 0), 0);
       const exps = items.map((v) => v.expiry).filter(Boolean).sort();
       const u = exps[0] ? urgency(exps[0]) : null;
       const color = meta.color;
@@ -2020,7 +2058,7 @@
           <div class="vb-logo" style="background:linear-gradient(150deg, ${color}cc, ${color}66);color:#fff">${esc(char)}</div>
           <div class="vb-info" data-dbl-action="voucher-brand-edit" data-brand="${esc(b)}">
             <div class="vb-name">${esc(b)}</div>
-            <div class="vb-meta">${count} 张券 · 剩 <span class="${remaining > 0 ? 'vb-rem' : 'vb-rem vb-rem-zero'}">${remaining}</span> 次${u ? ' · ' + expPill(u) : ''}</div>
+            <div class="vb-meta">${count} 张券 · ${storedSum > 0 ? `储值 ¥${storedSum}` : `剩 <span class="${countRem > 0 ? 'vb-rem' : 'vb-rem vb-rem-zero'}">${countRem}</span> 次`}${u ? ' · ' + expPill(u) : ''}</div>
           </div>
           <span class="vb-arrow ms">${collapsed ? 'expand_more' : 'expand_less'}</span>
         </div>
@@ -2032,7 +2070,10 @@
         </div>`}
       </div>`;
     };
-    const totalRemaining = state.vouchers.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
+    const allCount = state.vouchers.filter((v) => vMode(v) === 'count');
+    const allStored = state.vouchers.filter((v) => vMode(v) === 'amount');
+    const totalCountRem = allCount.reduce((s, v) => s + ((v.totalUses || 0) - (v.usedUses || 0)), 0);
+    const totalStored = allStored.reduce((s, v) => s + (Number(v.balance) || 0), 0);
     const expiringCount = state.vouchers.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
     const hasAny = state.vouchers.length || (state.voucherBrands || []).length;
     const emptyHTML = hasAny ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">暂无卡/票，点下方「添加商家」开始</div>';
@@ -2041,7 +2082,8 @@
     <div class="card" style="padding:12px var(--mx);margin:4px var(--mx) 8px;display:flex;gap:8px;justify-content:space-around;text-align:center">
       <div><div class="num-hero" style="font-size:20px;margin:0">${state.vouchers.length}</div><div class="muted" style="font-size:11px">全部券</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--warn)">${expiringCount}</div><div class="muted" style="font-size:11px">即将到期</div></div>
-      <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalRemaining}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
+      <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">¥${totalStored}</div><div class="muted" style="font-size:11px">储值余额</div></div>
+      <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalCountRem}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
     ${emptyHTML}
     <div style="padding:0 10px 12px">${brandNames.map(brandBlock).join('')}</div>
@@ -2053,7 +2095,7 @@
   function renderVoucherBrand(brand) {
     const items = state.vouchers.filter((v) => (v.brand || v.name) === brand);
     items.sort((a, b) => daysLeft(a.expiry || '2099-12-31') - daysLeft(b.expiry || '2099-12-31'));
-    const totalRemaining = items.reduce((s, v) => s + (v.totalUses - v.usedUses), 0);
+    const totalRemaining = items.reduce((s, v) => s + vRemaining(v), 0);
     const expiring = items.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
     const formOpen = vAddForm && vAddForm.brand === brand;
     const emptyHTML = items.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">该商家暂无券</div>';
@@ -2087,6 +2129,7 @@
       const act = isAdd ? '新增了' : isUse ? '使用了' : '退回了';
       const dot = isUse ? '－' : '＋';
       const cls = isUse ? 'minus' : 'plus';
+      const amtTxt = (tx.amount && Number(tx.amount)) ? ` ¥${Number(tx.amount)}` : '';
       return `<div class="swipe" data-swipe>
         <div class="swipe-actions">
           <button class="swipe-btn del" data-action="voucher-txn-del" data-id="${v.id}" data-txid="${tx.id}">删除</button>
@@ -2094,8 +2137,8 @@
         <div class="swipe-front row-compact vh-row">
           <div class="rc-dot ${cls}">${dot}</div>
           <div class="rc-main">
-            <div class="rc-title vh-title">${act} <span class="vh-name">${esc(v.name)}</span></div>
-            <div class="rc-sub vh-sub">${fmtDateTime(tx.date)} · ${esc(v.brand || '')} ${meta.l}${isAdd ? ' · 共 ' + v.totalUses + ' 次' : ''}</div>
+            <div class="rc-title vh-title">${act} <span class="vh-name">${esc(v.name)}</span>${amtTxt}</div>
+            <div class="rc-sub vh-sub">${fmtDateTime(tx.date)} · ${esc(v.brand || '')} ${meta.l}${isAdd ? (vMode(v) === 'amount' ? ' · 余额 ¥' + (Number(v.balance) || 0) : ' · 共 ' + v.totalUses + ' 次') : ''}</div>
           </div>
         </div>
       </div>`;
@@ -2116,151 +2159,76 @@
     </div>`;
   }
 
-  function renderVoucherDetail(id) {
-    const v = state.vouchers.find((x) => x.id === id);
-    if (!v) { navigate('vouchers'); return ''; }
-    const u = urgency(v.expiry);
-    const remaining = v.totalUses - v.usedUses;
-    const pct = Math.round((v.usedUses / v.totalUses) * 100);
-    const meta = vTypeMeta(v);
-    const bgColor = meta.color;
-    const icon = meta.icon;
-    const txnsSorted = [...(v.transactions || [])].sort((a, b) => parse(b.date) - parse(a.date));
-    const txnRow = (tx) => `<div class="swipe" data-swipe>
-        <div class="swipe-actions">
-          <button class="swipe-btn del" data-action="voucher-txn-del" data-id="${v.id}" data-txid="${tx.id}">删除</button>
-        </div>
-        <div class="swipe-front row-compact">
-          <div class="rc-dot ${tx.kind === 'use' ? 'minus' : 'plus'}">${tx.kind === 'use' ? '－' : '＋'}</div>
-          <div class="rc-main"><div class="rc-title">${esc(tx.note)}</div><div class="rc-sub">${fmtDateCN(parse(tx.date))}</div></div>
-        </div>
-      </div>`;
-    return `
-    ${hdr(esc(v.name), '')}
-
-    <!-- Brand identity -->
-    <div class="flex items-center gap-md" style="margin:4px var(--mx) 12px">
-      <div class="ic-card-logo" style="width:44px;height:44px;min-width:44px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;background:${bgColor}15;border:1px solid ${bgColor}30">
-        <span class="ms" style="font-size:24px;color:${bgColor}">${icon}</span>
-      </div>
-      <div><div class="t-body" style="font-weight:700">${esc(v.name)}</div><div class="muted" style="font-size:12px">${esc(v.brand)} · ${meta.l}</div></div>
-    </div>
-
-    <!-- Scope + expiry info -->
-    <div class="card" style="margin:0 var(--mx) 12px;padding:12px 16px">
-      <div class="flex between items-center" style="gap:8px">
-        <span class="ic-card-tag" style="background:${bgColor}18;color:${bgColor};font-size:11px;padding:2px 8px">${meta.icon} ${meta.l}</span>
-        <span class="badge ${u.level === 'urgent' ? 'urgent' : u.level === 'soon' ? 'warn' : 'ok'}">${u.txt}</span>
-      </div>
-      ${v.expiry ? `<div class="muted" style="font-size:12px;margin-top:8px">🗓 到期：${v.expiry}</div>` : ''}
-      ${v.scope ? `<div class="muted" style="font-size:13px;margin-top:6px;color:var(--txt)">📍 <span class="muted">适用范围：</span>${esc(v.scope)}</div>` : ''}
-    </div>
-
-    <!-- Settings card (edit + delete) -->
-    <div class="card" style="margin:0 var(--mx) 12px;padding:10px 16px">
-      <div class="flex items-center gap-md" style="gap:8px">
-        <button class="btn btn-primary flex main justify-center" style="flex:1;font-size:13px" data-action="voucher-edit" data-id="${v.id}"><span class="ms" style="font-size:16px">edit</span> 编辑</button>
-        <button class="btn btn-ghost flex main justify-center" style="flex:1;font-size:13px;color:#dc2626;border-color:#dc262633" data-action="voucher-del" data-id="${v.id}"><span class="ms" style="font-size:16px">delete</span> 删除</button>
-      </div>
-    </div>
-
-    <!-- Usage card -->
-    <div class="card accent-gold pad-lg glow">
-      <div class="flex between items-center">
-        <span class="muted t-label" style="text-transform:none">使用进度</span>
-        <span class="badge ${u.level === 'urgent' ? 'urgent' : u.level === 'soon' ? 'warn' : 'ok'}">${u.txt}</span>
-      </div>
-      <div class="num-hero num-grad" style="margin-top:4px;font-size:28px">${remaining}<span class="muted" style="font-size:16px;font-weight:500"> / ${v.totalUses} 次</span></div>
-      <div class="progress" style="margin:8px 0 4px;height:8px;border-radius:10px"><i style="width:${pct}%;background:${bgColor};border-radius:10px;transition:width 0.3s"></i></div>
-      <div class="flex between items-center">
-        <span class="muted" style="font-size:12px">已用 ${v.usedUses} 次</span>
-        <span class="muted" style="font-size:12px">${remaining === 0 ? '已用完' : '剩余 ' + remaining + ' 次'}</span>
-      </div>
-      <div class="flex gap-sm mt-lg">
-        <button class="btn btn-gold flex main justify-center" data-action="voucher-use" data-id="${v.id}" ${remaining <= 0 ? 'disabled' : ''}>⊕ 使用 1 次</button>
-        <button class="btn btn-ghost flex main justify-center" data-action="voucher-use-dec" data-id="${v.id}" ${v.usedUses <= 0 ? 'disabled' : ''}>⊖ 退回 1 次</button>
-      </div>
-      ${v.note ? `<div class="muted" style="margin-top:10px;font-size:12px;padding:8px 10px;background:var(--bg3);border-radius:var(--r-md)">📝 ${esc(v.note)}</div>` : ''}
-    </div>
-
-    <!-- Usage timeline -->
-    <div class="section-head"><h2>使用记录</h2></div>
-    <div class="card" style="padding:4px 0">${txnsSorted.length ? txnsSorted.map(txnRow).join('') : '<div class="muted text-center" style="padding:20px">暂无使用记录</div>'}</div>`;
-  }
-
   /* 类型分段控件 HTML — 供添加/编辑弹窗复用 */
   function voucherTypeSeg(active) {
     const opts = VOUCHER_TYPE_ORDER.map((tk) =>
       `<div class="opt ${resolveVoucherType({ type: active }) === tk ? 'active' : ''}" data-vt="${tk}" data-vt-opt data-action="vt-opt">${VOUCHER_TYPES[tk].l}</div>`).join('');
     return `<div class="seg-ctl" data-vt-seg style="gap:4px">${opts}</div>`;
   }
-  const voucherTypeOf = () => { const el = document.querySelector('.seg-ctl .opt.active'); return el ? el.dataset.vt : 'coupon'; };
-
-  function openVoucherAddSheet(brand) {
-    const body = `
-      <div class="field" style="margin:8px 0"><label>名称 <small style="color:var(--err)">*</small></label><input id="vf_name" placeholder="如 喜茶 买一送一券"></div>
-      <div class="field"><label>品牌</label><input id="vf_brand" value="${esc(brand || '')}" placeholder="如 喜茶 / 瑞幸"></div>
-      <div class="field"><label>类型</label>${voucherTypeSeg('coupon')}</div>
-      <div class="flex gap-sm">
-        <div class="field" style="flex:1"><label>总次数</label><input id="vf_uses" type="number" value="1"></div>
-        <div class="field" style="flex:1"><label>已用次数</label><input id="vf_used" type="number" value="0"></div>
-      </div>
-      <div class="field"><label>到期日</label><input id="vf_exp" type="date"></div>
-      <div class="field"><label>适用范围（选填）</label><input id="vf_scope" placeholder="如 全国门店、限自提、满 25 可用"></div>
-      <div class="field"><label>备注（选填）</label><textarea id="vf_note" placeholder="使用条件、兑换方式等"></textarea></div>
-      <button class="btn btn-primary btn-block mt-lg" id="vfSubmit">保存</button>`;
-    openSheet('添加卡 / 券 / 票', body, (root, _close) => {
-      root.querySelector('#vfSubmit').addEventListener('click', () => {
-        const name = root.querySelector('#vf_name').value.trim();
-        if (!name) return toast('请输入名称');
-        const brand = root.querySelector('#vf_brand').value.trim() || name;
-        const type = voucherTypeOf();
-        const totalUses = Math.max(1, Number(root.querySelector('#vf_uses').value) || 1);
-        const usedUses = Math.max(0, Math.min(Number(root.querySelector('#vf_used').value) || 0, totalUses));
-        const expiry = root.querySelector('#vf_exp').value || '';
-        const scope = root.querySelector('#vf_scope').value.trim() || '';
-        const note = root.querySelector('#vf_note').value.trim() || '';
-        const meta = VOUCHER_TYPES[type];
-        state.vouchers.push({
-          id: uid(), name, brand, type, totalUses, usedUses, expiry, scope, note, color: meta.cat,
-          transactions: [],
-        });
-        persist(); closeSheet(); navigate(brand ? 'voucherBrand' : 'vouchers', brand); toast('已添加「' + name + '」');
-      });
-    });
-  }
+  const voucherTypeOf = (root) => { const el = (root || document).querySelector('.seg-ctl .opt.active'); return el ? el.dataset.vt : 'coupon'; };
 
   function openVoucherEditSheet(v) {
     if (!v) return;
     const resolvedType = resolveVoucherType(v);
+    const fields = FIELDS_FOR_TYPE[resolvedType] || ['count'];
+    const fieldBlock = (key, html) => `<div class="va-fields" data-fields="${key}"${fields.includes(key) ? '' : ' hidden'}>${html}</div>`;
     const body = `
       <div class="field" style="margin:8px 0"><label>名称 <small style="color:var(--err)">*</small></label><input id="vf_name" value="${esc(v.name)}"></div>
       <div class="field"><label>品牌</label><input id="vf_brand" value="${esc(v.brand || '')}"></div>
       <div class="field"><label>类型</label>${voucherTypeSeg(resolvedType)}</div>
-      <div class="flex gap-sm">
-        <div class="field" style="flex:1"><label>总次数</label><input id="vf_uses" type="number" value="${v.totalUses}"></div>
-        <div class="field" style="flex:1"><label>已用次数</label><input id="vf_used" type="number" value="${v.usedUses}"></div>
-      </div>
+      ${fieldBlock('count', `<div class="flex gap-sm">
+        <div class="field" style="flex:1"><label>总次数</label><input id="vf_uses" type="number" value="${v.totalUses || 1}"></div>
+        <div class="field" style="flex:1"><label>已用次数</label><input id="vf_used" type="number" value="${v.usedUses || 0}"></div>
+      </div>`)}
+      ${fieldBlock('amount', `<div class="field"><label>当前余额（元）</label><input id="vf_balance" type="number" value="${Number(v.balance) || 0}" min="0"></div>`)}
+      ${fieldBlock('rule', `<div class="flex gap-sm">
+        <div class="field" style="flex:1"><label>满（元）</label><input id="vf_thr" type="number" value="${Number(v.threshold) || 0}" min="0"></div>
+        <div class="field" style="flex:1"><label>减（元）</label><input id="vf_dis" type="number" value="${Number(v.discount) || 0}" min="0"></div>
+      </div>`)}
       <div class="field"><label>到期日</label><input id="vf_exp" type="date" value="${esc(v.expiry || '')}"></div>
       <div class="field"><label>适用范围（选填）</label><input id="vf_scope" value="${esc(v.scope || '')}" placeholder="如 全国门店、限自提、满 25 可用"></div>
       <div class="field"><label>备注（选填）</label><textarea id="vf_note">${esc(v.note || '')}</textarea></div>
-      <button class="btn btn-primary btn-block mt-lg" id="vfSubmit">保存修改</button>`;
+      <div class="flex gap-sm mt-lg">
+        <button class="btn btn-primary flex main justify-center" id="vfSubmit">保存修改</button>
+        <button class="btn btn-ghost flex main justify-center" style="color:#dc2626;border-color:#dc262633" data-action="voucher-del" data-id="${v.id}">删除</button>
+      </div>`;
     openSheet('编辑卡 / 券 / 票', body, (root) => {
+      // 类型分段：sheet 内 stopPropagation，需直接绑定（逻辑同全局 vt-opt）
+      root.querySelectorAll('[data-vt-opt]').forEach((opt) => opt.addEventListener('click', () => {
+        const seg = root.querySelector('[data-vt-seg]');
+        seg.querySelectorAll('[data-vt-opt]').forEach((x) => x.classList.remove('active'));
+        opt.classList.add('active');
+        const type = opt.dataset.vt;
+        root.querySelectorAll('.va-fields').forEach((f) => { f.hidden = true; });
+        (FIELDS_FOR_TYPE[type] || ['count']).forEach((k) => {
+          const g = root.querySelector('.va-fields[data-fields="' + k + '"]');
+          if (g) g.hidden = false;
+        });
+      }));
+      // 删除按钮：sheet 内 stopPropagation，直接绑定（逻辑同全局 voucher-del）
+      const delBtn = root.querySelector('[data-action="voucher-del"]');
+      if (delBtn) delBtn.addEventListener('click', () => {
+        if (!confirm('确认删除「' + v.name + '」？')) return;
+        state.vouchers = state.vouchers.filter((x) => x.id !== v.id);
+        persist(); closeSheet(); navigate('vouchers'); toast('已删除');
+      });
       root.querySelector('#vfSubmit').addEventListener('click', () => {
         const name = root.querySelector('#vf_name').value.trim();
         if (!name) return toast('请输入名称');
         const brand = root.querySelector('#vf_brand').value.trim() || name;
-        const type = voucherTypeOf();
-        const totalUses = Math.max(1, Number(root.querySelector('#vf_uses').value) || 1);
-        const usedUses = Math.max(0, Math.min(Number(root.querySelector('#vf_used').value) || 0, totalUses));
-        const expiry = root.querySelector('#vf_exp').value || '';
-        const scope = root.querySelector('#vf_scope').value.trim() || '';
-        const note = root.querySelector('#vf_note').value.trim() || '';
-        const meta = VOUCHER_TYPES[type];
-        Object.assign(v, {
-          name, brand, type, totalUses, usedUses, expiry, scope, note, color: meta.cat,
-        });
-        persist(); closeSheet(); navigate('voucherDetail', v.id); toast('已保存');
+        const type = voucherTypeOf(root);
+        const m = VOUCHER_TYPES[type] || VOUCHER_TYPES.coupon;
+        const obj = { name, brand, type, color: m.cat, expiry: root.querySelector('#vf_exp').value || '', scope: root.querySelector('#vf_scope').value.trim() || '', note: root.querySelector('#vf_note').value.trim() || '' };
+        if (m.mode === 'amount') {
+          obj.balance = Math.max(0, Number(root.querySelector('#vf_balance').value) || 0);
+          obj.totalUses = 1; obj.usedUses = 0;
+        } else {
+          obj.totalUses = Math.max(1, Number(root.querySelector('#vf_uses').value) || 1);
+          obj.usedUses = Math.max(0, Math.min(Number(root.querySelector('#vf_used').value) || 0, obj.totalUses));
+          if (m.rule) { obj.threshold = Math.max(0, Number(root.querySelector('#vf_thr').value) || 0); obj.discount = Math.max(0, Number(root.querySelector('#vf_dis').value) || 0); }
+        }
+        Object.assign(v, obj);
+        persist(); closeSheet(); navigate('vouchers'); toast('已保存');
       });
     });
   }
@@ -3518,7 +3486,7 @@
         const i = el.dataset.id;
         if (k === 'credit') navigate('creditDetail', i);
         else if (k === 'membership') navigate('membershipDetail', i);
-        else if (k === 'voucher') navigate('voucherDetail', i);
+        else if (k === 'voucher') { const vv = state.vouchers.find((x) => x.id === i); if (vv) openVoucherEditSheet(vv); else navigate('vouchers'); }
         else if (k === 'knowledge') { kgTab = 'overview'; navigate('knowledgeDetail', i); }
         break;
       }
@@ -3776,12 +3744,6 @@
       case 'knowledge-edit':
         openKnowledgeEditSheet(state.knowledge.find((x) => x.id === el.dataset.id));
         break;
-      case 'add-voucher':
-        openVoucherAddSheet();
-        break;
-      case 'add-voucher-brand':
-        openVoucherAddSheet(el.dataset.brand);
-        break;
       case 'voucherBrand':
         navigate('voucherBrand', el.dataset.brand);
         break;
@@ -3804,12 +3766,21 @@
         vAddForm = { brand: '' };
         rerender();
         break;
-      // 类型分段控件（内联表单/弹窗通用）
+      // 类型分段控件（内联表单/弹窗通用）：切换类型时就地显示对应字段组，不跳转、不丢输入
       case 'vt-opt': {
         const seg = el.closest('[data-vt-seg]');
         if (!seg) break;
         seg.querySelectorAll('[data-vt-opt]').forEach((x) => x.classList.remove('active'));
         el.classList.add('active');
+        const type = el.dataset.vt;
+        const form = el.closest('.va-form');
+        if (form) {
+          form.querySelectorAll('.va-fields').forEach((f) => { f.hidden = true; });
+          (FIELDS_FOR_TYPE[type] || ['count']).forEach((k) => {
+            const g = form.querySelector('.va-fields[data-fields="' + k + '"]');
+            if (g) g.hidden = false;
+          });
+        }
         break;
       }
       case 'va-cancel':
@@ -3828,20 +3799,27 @@
           persist(); rerender(); toast('已添加商家「' + b + '」');
           break;
         }
-        // 商家内添加券
+        // 商家内添加券（按类型读取不同字段）
         const nameEl = document.getElementById('va_name');
         const name = (nameEl && nameEl.value.trim()) || '';
         if (!name) return toast('请输入名称');
         const type = voucherTypeOf();
-        const totalUses = Math.max(1, Number(document.getElementById('va_uses').value) || 1);
-        const usedUses = Math.max(0, Math.min(Number(document.getElementById('va_used').value) || 0, totalUses));
+        const m = VOUCHER_TYPES[type] || VOUCHER_TYPES.coupon;
         const expiry = document.getElementById('va_exp').value || '';
         const scope = document.getElementById('va_scope').value.trim() || '';
-        const meta = VOUCHER_TYPES[type];
-        state.vouchers.push({
-          id: uid(), name, brand: el.dataset.brand, type, totalUses, usedUses, expiry, scope, note: '', color: meta.cat,
-          transactions: [{ id: uid(), date: nowDT(), kind: 'add', amount: 0, note: '新增券' }],
-        });
+        const obj = { id: uid(), name, brand: el.dataset.brand, type, expiry, scope, note: '', color: m.cat, transactions: [] };
+        if (m.mode === 'amount') {
+          const bal = Math.max(0, Number(document.getElementById('va_balance').value) || 0);
+          obj.balance = bal; obj.totalUses = 1; obj.usedUses = 0;
+          obj.transactions.push({ id: uid(), date: nowDT(), kind: 'add', amount: bal, note: '新增储值卡，余额 ¥' + bal });
+        } else {
+          const totalUses = Math.max(1, Number(document.getElementById('va_uses').value) || 1);
+          const usedUses = Math.max(0, Math.min(Number(document.getElementById('va_used').value) || 0, totalUses));
+          obj.totalUses = totalUses; obj.usedUses = usedUses;
+          if (m.rule) { obj.threshold = Math.max(0, Number(document.getElementById('va_thr').value) || 0); obj.discount = Math.max(0, Number(document.getElementById('va_dis').value) || 0); }
+          obj.transactions.push({ id: uid(), date: nowDT(), kind: 'add', amount: 0, note: '新增券' });
+        }
+        state.vouchers.push(obj);
         vAddForm = null;
         persist(); rerender(); toast('已添加「' + name + '」');
         break;
@@ -3849,6 +3827,7 @@
       case 'voucher-use': {
         const v = state.vouchers.find((x) => x.id === el.dataset.id);
         if (!v) break;
+        if (vMode(v) === 'amount') break;
         if (v.usedUses >= v.totalUses) return toast('该卡/票已用完');
         v.usedUses++;
         (v.transactions = v.transactions || []).push({ id: uid(), date: nowDT(), kind: 'use', amount: 0, note: '使用 1 次' });
@@ -3861,6 +3840,32 @@
         v.usedUses--;
         (v.transactions = v.transactions || []).push({ id: uid(), date: nowDT(), kind: 'refund', amount: 0, note: '退回 1 次' });
         persist(); rerender(); toast('已退回 1 次');
+        break;
+      }
+      case 'voucher-use-amt': {
+        const v = state.vouchers.find((x) => x.id === el.dataset.id);
+        if (!v) break;
+        const raw = prompt('本次消费金额（元）：', '0');
+        if (raw === null) break;
+        const amt = Math.max(0, Number(raw) || 0);
+        if (amt <= 0) return toast('请输入大于 0 的金额');
+        const bal = Number(v.balance) || 0;
+        if (amt > bal) return toast('余额不足（当前 ¥' + bal + '）');
+        v.balance = bal - amt;
+        (v.transactions = v.transactions || []).push({ id: uid(), date: nowDT(), kind: 'use', amount: amt, note: '消费 ¥' + amt });
+        persist(); rerender(); toast('已消费 ¥' + amt + '，余额 ¥' + v.balance);
+        break;
+      }
+      case 'voucher-use-dec-amt': {
+        const v = state.vouchers.find((x) => x.id === el.dataset.id);
+        if (!v) break;
+        const raw = prompt('本次退款金额（元）：', '0');
+        if (raw === null) break;
+        const amt = Math.max(0, Number(raw) || 0);
+        if (amt <= 0) return toast('请输入大于 0 的金额');
+        v.balance = (Number(v.balance) || 0) + amt;
+        (v.transactions = v.transactions || []).push({ id: uid(), date: nowDT(), kind: 'refund', amount: amt, note: '退款 ¥' + amt });
+        persist(); rerender(); toast('已退款 ¥' + amt + '，余额 ¥' + v.balance);
         break;
       }
       case 'voucher-edit':
@@ -3900,7 +3905,7 @@
         if (!v) break;
         if (!confirm('确认删除「' + v.name + '」？')) break;
         state.vouchers = state.vouchers.filter((x) => x.id !== el.dataset.id);
-        persist(); navigate('vouchers'); toast('已删除');
+        persist(); closeSheet(); navigate('vouchers'); toast('已删除');
         break;
       }
       case 'cc-toggle-list':
@@ -3939,7 +3944,7 @@
         const v = state.vouchers.find((x) => x.id === el.dataset.id);
         if (!v) break;
         const tx = v.transactions.find((t) => t.id === el.dataset.txid);
-        if (tx) { v.transactions = v.transactions.filter((t) => t.id !== tx.id); persist(); navigate('voucherDetail', v.id); toast('已删除'); }
+        if (tx) { v.transactions = v.transactions.filter((t) => t.id !== tx.id); persist(); navigate('vouchers'); toast('已删除'); }
         break;
       }
       case 'add-perk': {
