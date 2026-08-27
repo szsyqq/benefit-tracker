@@ -941,10 +941,13 @@ ul, li { list-style: none; }
 .vc-name {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   font-size: 13px; font-weight: 600; color: var(--txt);
+  overflow: hidden; max-width: 100%;
 }
+.vc-name > * { max-width: 100%; }
 .vc-tag {
   font-size: 10px; font-weight: 500;
   padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  flex-shrink: 0;
 }
 .vc-usedup {
   background: var(--bg3); color: var(--txt2);
