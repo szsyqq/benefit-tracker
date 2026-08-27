@@ -233,7 +233,7 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.76';
+  const APP_VERSION = '2.15.77';
   const CHANGELOG = [
     { v: '2.15.76', date: '2026-08-27', tag: '优化', head: '卡/票：双击改名 + 修复类型切换与边界对齐', items: [
       '修复内联添加表单的类型分段无法点击（改为全局事件委托，表单/弹窗通用）',
@@ -726,7 +726,12 @@
     on: (function () { try { return localStorage.getItem('cbOn') === '1'; } catch (e) { return false; } })(),
     ready: false, app: null, db: null, pushTimer: null, _status: 'off',
   };
-  const CB_SDK_URL = 'https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@2/dist/cloudbase.full.js';
+  // 注意：新版 @cloudbase/js-sdk 不再提供浏览器全局构建（无 cloudbase.full.js），
+  // 改为动态 import() ESM；固定到 v2 线（2.32.0）以兼容现有的 database/auth API。
+  const CB_SDK_URLS = [
+    'https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@2.32.0/+esm',
+    'https://esm.sh/@cloudbase/js-sdk@2.32.0',
+  ];
 
   function cbStatus(kind, msg) {
     SYNC._status = kind; SYNC._msg = msg || '';
@@ -766,15 +771,18 @@
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
     return JSON.parse(new TextDecoder().decode(pt));
   }
-  function loadCbSdk() {
-    return new Promise((res, rej) => {
-      if (window.cloudbase) return res(window.cloudbase);
-      const s = document.createElement('script');
-      s.src = CB_SDK_URL; s.async = true;
-      s.onload = () => res(window.cloudbase);
-      s.onerror = () => rej(new Error('CloudBase SDK 加载失败（检查网络/域名）'));
-      document.head.appendChild(s);
-    });
+  async function loadCbSdk() {
+    if (SYNC._tcb) return SYNC._tcb;
+    let lastErr;
+    for (const url of CB_SDK_URLS) {
+      try {
+        const mod = await import(url);
+        const tcb = mod && (mod.default || mod);
+        if (tcb && typeof tcb.init === 'function') { SYNC._tcb = tcb; return tcb; }
+        lastErr = new Error('CloudBase SDK 模块格式异常');
+      } catch (e) { lastErr = e; }
+    }
+    throw new Error('CloudBase SDK 加载失败（检查网络/域名）' + (lastErr ? '：' + lastErr.message : ''));
   }
   async function cbInit() {
     if (!SYNC.env) throw new Error('未填写环境 ID');
