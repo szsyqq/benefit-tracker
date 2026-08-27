@@ -871,7 +871,14 @@ ul, li { list-style: none; }
   font-size: 18px; font-weight: 700;
 }
 .vb-info { flex: 1; min-width: 0; }
-.vb-name { font-size: 15px; font-weight: 600; color: var(--txt); }
+.vb-name { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 600; color: var(--txt); }
+.vb-edit, .vc-edit {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--txt2); padding: 0; display: inline-flex;
+  align-items: center; justify-content: center;
+}
+.vb-edit .ms, .vc-edit .ms { font-size: 13px; }
+.vb-edit:active, .vc-edit:active { color: var(--p); }
 .vb-meta {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
   font-size: 11px; color: var(--txt2); margin-top: 2px;
