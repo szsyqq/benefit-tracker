@@ -233,7 +233,7 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.77';
+  const APP_VERSION = '2.15.78';
   const CHANGELOG = [
     { v: '2.15.76', date: '2026-08-27', tag: '优化', head: '卡/票：双击改名 + 修复类型切换与边界对齐', items: [
       '修复内联添加表单的类型分段无法点击（改为全局事件委托，表单/弹窗通用）',
@@ -276,6 +276,15 @@
       '点进商家后展示该商家下的各种券（满减券、立减券、次卡等），每张独立、可单独核销',
       '添加/编辑支持：商家、类型（次卡/储值卡/券/票）、到期日、适用范围，差异化录入不同时间/类型的券',
       '商家页与首页均提供「＋」入口，商家页添加自动归入当前商家',
+    ]},
+    { v: '2.15.78', date: '2026-08-28', tag: '优化', head: '云端同步改为 GitHub Gist', items: [
+      '同步后端从 CloudBase 迁移到 GitHub Gist：无需自建环境，Token 仅需 gist 权限',
+      '数据仍经 AES-GCM 端到端加密后存入你的私密 Gist，Gist ID 首次同步自动生成',
+      '设置页改填 GitHub Token + 同步密码；两端填相同 Token 与密码即可共享',
+    ]},
+    { v: '2.15.77', date: '2026-08-28', tag: '修复', head: '云端同步 SDK 加载修复', items: [
+      '原 CloudBase SDK 地址已失效（新版不再提供浏览器全局构建），改为动态 import() ESM',
+      '修复后开启同步不会再报「SDK 加载失败」',
     ]},
     { v: '2.15.69', date: '2026-08-26', tag: '新功能', head: '新增「卡/票」管理', items: [
       '底部导航新增第 6 个 Tab「卡/票」，独立管理会员卡与礼券（喜茶卡、咖啡票等）',
@@ -717,21 +726,19 @@
   }
 
   /* ============================================================
-   *  云端同步（CloudBase）—— 可选，默认关闭
-   *  数据经 AES-GCM 端到端加密后存入云端；两端填相同 环境ID+同步密码 即可共享
+   *  云端同步（GitHub Gist）—— 可选，默认关闭
+   *  数据经 AES-GCM 端到端加密后存入你的「私密 Gist」；
+   *  两端填相同 GitHub Token + 同步密码 即可共享（Gist ID 首次同步自动生成）。
    * ============================================================ */
   const SYNC = {
-    env: (function () { try { return localStorage.getItem('cbEnv') || ''; } catch (e) { return ''; } })(),
-    pass: (function () { try { return localStorage.getItem('cbPass') || ''; } catch (e) { return ''; } })(),
-    on: (function () { try { return localStorage.getItem('cbOn') === '1'; } catch (e) { return false; } })(),
-    ready: false, app: null, db: null, pushTimer: null, _status: 'off',
+    token: (function () { try { return localStorage.getItem('ghToken') || ''; } catch (e) { return ''; } })(),
+    gistId: (function () { try { return localStorage.getItem('ghGistId') || ''; } catch (e) { return ''; } })(),
+    pass: (function () { try { return localStorage.getItem('ghPass') || ''; } catch (e) { return ''; } })(),
+    on: (function () { try { return localStorage.getItem('ghOn') === '1'; } catch (e) { return false; } })(),
+    ready: false, pushTimer: null, _status: 'off',
   };
-  // 注意：新版 @cloudbase/js-sdk 不再提供浏览器全局构建（无 cloudbase.full.js），
-  // 改为动态 import() ESM；固定到 v2 线（2.32.0）以兼容现有的 database/auth API。
-  const CB_SDK_URLS = [
-    'https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@2.32.0/+esm',
-    'https://esm.sh/@cloudbase/js-sdk@2.32.0',
-  ];
+  const GH_API = 'https://api.github.com';
+  const SYNC_FILE = 'wool-sync.json';
 
   function cbStatus(kind, msg) {
     SYNC._status = kind; SYNC._msg = msg || '';
@@ -771,56 +778,68 @@
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
     return JSON.parse(new TextDecoder().decode(pt));
   }
-  async function loadCbSdk() {
-    if (SYNC._tcb) return SYNC._tcb;
-    let lastErr;
-    for (const url of CB_SDK_URLS) {
-      try {
-        const mod = await import(url);
-        const tcb = mod && (mod.default || mod);
-        if (tcb && typeof tcb.init === 'function') { SYNC._tcb = tcb; return tcb; }
-        lastErr = new Error('CloudBase SDK 模块格式异常');
-      } catch (e) { lastErr = e; }
+  async function ghReq(path, opts) {
+    const headers = {
+      'Authorization': 'Bearer ' + SYNC.token,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    const r = await fetch(GH_API + path, Object.assign({ headers }, opts || {}));
+    if (!r.ok) {
+      let detail = '';
+      try { const j = await r.json(); detail = j.message || ''; } catch (e) {}
+      throw new Error('GitHub 返回 ' + r.status + (detail ? '：' + detail : ''));
     }
-    throw new Error('CloudBase SDK 加载失败（检查网络/域名）' + (lastErr ? '：' + lastErr.message : ''));
+    if (r.status === 204) return null;
+    return r.json();
   }
   async function cbInit() {
-    if (!SYNC.env) throw new Error('未填写环境 ID');
-    if (SYNC.ready) return;
-    const tcb = await loadCbSdk();
-    const app = tcb.init({ env: SYNC.env });
-    await app.auth().signInAnonymously();
-    SYNC.app = app; SYNC.db = app.database(); SYNC.ready = true;
+    if (!SYNC.token) throw new Error('未填写 GitHub Token');
+    SYNC.ready = true;
   }
   async function cbPush(st) {
-    if (!SYNC.on || !SYNC.env) return;
+    if (!SYNC.on || !SYNC.token) return;
     if (!SYNC.ready) { try { await cbInit(); } catch (e) { cbStatus('err', e.message); return; } }
     try {
       cbStatus('syncing');
       const blob = await cbEncrypt(st, SYNC.pass || 'wool-default');
-      await SYNC.db.collection('app_state').doc('me').set({ data: blob, updatedAt: Date.now() });
+      if (!SYNC.gistId) {
+        const created = await ghReq('/gists', {
+          method: 'POST',
+          body: JSON.stringify({ public: false, description: '别忘了羊毛 · 同步备份', files: { [SYNC_FILE]: { content: blob } } }),
+        });
+        SYNC.gistId = created.id;
+        try { localStorage.setItem('ghGistId', SYNC.gistId); } catch (e) {}
+      } else {
+        await ghReq('/gists/' + SYNC.gistId, {
+          method: 'PATCH',
+          body: JSON.stringify({ files: { [SYNC_FILE]: { content: blob } } }),
+        });
+      }
       cbStatus('ok');
     } catch (e) { cbStatus('err', e.message); }
   }
   async function cbPull() {
-    if (!SYNC.on || !SYNC.env) return null;
+    if (!SYNC.on || !SYNC.token) return null;
     if (!SYNC.ready) { try { await cbInit(); } catch (e) { cbStatus('err', e.message); return null; } }
+    if (!SYNC.gistId) return null;
     try {
-      const res = await SYNC.db.collection('app_state').doc('me').get();
-      const doc = res.data && res.data[0];
-      if (!doc || !doc.data) return null;
-      const st = await cbDecrypt(doc.data, SYNC.pass || 'wool-default');
+      const g = await ghReq('/gists/' + SYNC.gistId);
+      const f = g.files && g.files[SYNC_FILE];
+      if (!f || !f.content) return null;
+      const st = await cbDecrypt(f.content, SYNC.pass || 'wool-default');
       cbStatus('ok');
       return st;
     } catch (e) { cbStatus('err', e.message); return null; }
   }
   function scheduleSyncPush() {
-    if (!SYNC.on || !SYNC.env) return;
+    if (!SYNC.on || !SYNC.token) return;
     clearTimeout(SYNC.pushTimer);
     SYNC.pushTimer = setTimeout(() => { cbPush(state); }, 800);
   }
   async function initCloudSync() {
-    if (!SYNC.on || !SYNC.env) { cbStatus('off'); return; }
+    if (!SYNC.on || !SYNC.token) { cbStatus('off'); return; }
     const remote = await cbPull();
     if (remote && remote.creditCards) {
       state = remote;
@@ -2861,23 +2880,24 @@
       <div class="muted" style="font-size:12px;margin-top:8px">导出为 JSON 文件，换设备或重装后可一键导入。</div>
     </div>
 
-    <!-- 云端同步（CloudBase） -->
+    <!-- 云端同步（GitHub Gist） -->
     <div class="section-head"><h2>云端同步</h2></div>
     <div class="card pad-lg">
       <div class="field" style="margin-bottom:10px">
-        <label>CloudBase 环境 ID</label>
-        <input id="cbEnvInput" placeholder="例如 wool-1a2b3c" value="${esc(SYNC.env)}" style="width:100%">
+        <label>GitHub Token（需 gist 权限）</label>
+        <input id="ghTokenInput" type="password" placeholder="ghp_xxx 或 github_pat_xxx" value="${esc(SYNC.token)}" style="width:100%">
       </div>
       <div class="field" style="margin-bottom:10px">
         <label>同步密码（两端需一致，用于加密）</label>
-        <input id="cbPassInput" type="password" placeholder="设置一个同步密码" value="${esc(SYNC.pass)}" style="width:100%">
+        <input id="ghPassInput" type="password" placeholder="设置一个同步密码" value="${esc(SYNC.pass)}" style="width:100%">
       </div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">Gist ID：<code style="font-size:11px">${esc(SYNC.gistId) || '（首次同步后自动生成）'}</code></div>
       <div class="flex gap-sm" style="margin-bottom:8px">
         <button class="btn btn-primary main justify-center" data-action="sync-toggle">${SYNC.on ? '关闭同步' : '开启同步'}</button>
         <button class="btn btn-ghost main justify-center" data-action="sync-now">立即同步</button>
       </div>
       <div class="muted" style="font-size:12px">状态：<span id="syncStat" style="font-weight:600">${SYNC.on ? '待同步' : '未开启'}</span></div>
-      <div class="muted" style="font-size:12px;margin-top:6px">数据经端到端加密后存入云端，电脑/手机填<strong>相同环境 ID 与密码</strong>即可共享。需在 CloudBase 控制台开启<strong>匿名登录</strong>并建 <code>app_state</code> 集合（安全规则 read/write 全开）。</div>
+      <div class="muted" style="font-size:12px;margin-top:6px">数据经端到端加密后存入你的<strong>私密 Gist</strong>，Token 仅用于读写该 Gist，泄露也不会暴露明文（已加密）。两端填<strong>相同 Token 与同步密码</strong>即可共享。Token 在 GitHub → Settings → Developer settings → Personal access tokens 生成，勾选 <code>gist</code> 范围。</div>
     </div>`;
 
   }
@@ -3503,31 +3523,32 @@
         break;
       }
       case 'sync-toggle': {
-        const envEl = document.getElementById('cbEnvInput');
-        const passEl = document.getElementById('cbPassInput');
-        const env = (envEl && envEl.value) || '';
+        const tokenEl = document.getElementById('ghTokenInput');
+        const passEl = document.getElementById('ghPassInput');
+        const token = (tokenEl && tokenEl.value) || '';
         const pass = (passEl && passEl.value) || '';
-        if (!env) { toast('请先填写 CloudBase 环境 ID'); break; }
+        if (!token) { toast('请先填写 GitHub Token'); break; }
         const newOn = !SYNC.on;
-        SYNC.env = env; SYNC.pass = pass; SYNC.on = newOn;
-        try { localStorage.setItem('cbEnv', env); localStorage.setItem('cbPass', pass); localStorage.setItem('cbOn', newOn ? '1' : '0'); } catch (e) {}
+        SYNC.token = token; SYNC.pass = pass; SYNC.on = newOn;
+        try { localStorage.setItem('ghToken', token); localStorage.setItem('ghPass', pass); localStorage.setItem('ghOn', newOn ? '1' : '0'); } catch (e) {}
         if (newOn) {
-          toast('正在连接云端…');
+          toast('正在连接 GitHub…');
           initCloudSync().then(() => { if (typeof rerender === 'function') rerender(); });
         } else {
-          SYNC.ready = false; SYNC.app = null; SYNC.db = null; cbStatus('off');
+          SYNC.ready = false; cbStatus('off');
           if (typeof rerender === 'function') rerender();
         }
         break;
       }
       case 'sync-now': {
         if (!SYNC.on) { toast('请先开启同步'); break; }
-        const passEl = document.getElementById('cbPassInput');
-        const pass = (passEl && passEl.value) || SYNC.pass;
-        if (pass) SYNC.pass = pass;
-        if (!SYNC.env) { toast('请先开启同步'); break; }
+        const tokenEl = document.getElementById('ghTokenInput');
+        const passEl = document.getElementById('ghPassInput');
+        if (tokenEl && tokenEl.value) SYNC.token = tokenEl.value;
+        if (passEl && passEl.value) SYNC.pass = passEl.value;
+        if (!SYNC.token) { toast('请先开启同步'); break; }
         toast('正在同步…');
-        cbPush(state).then(() => toast('已推送到云端'));
+        cbPush(state).then(() => toast('已推送到 Gist'));
         break;
       }
       case 'add':
