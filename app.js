@@ -233,8 +233,14 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.74';
+  const APP_VERSION = '2.15.75';
   const CHANGELOG = [
+    { v: '2.15.75', date: '2026-08-27', tag: '优化', head: '卡/票：新增券与商家改名 + 布局与配色微调', items: [
+      '每张券名称旁新增编辑按钮（铅笔），可直接改名/改类型/改次数',
+      '每个商家名称旁新增编辑按钮，支持修改商家名（同步更新旗下所有券）',
+      '商家卡片左右留白加大，不再贴屏幕边缘',
+      '商家 Logo 改为品牌色渐变深底（白字），券图标保持浅色，商家与券有明暗区分',
+    ]},
     { v: '2.15.74', date: '2026-08-27', tag: '重构', head: '卡/票：商家与券解耦 + 使用记录文案清晰化', items: [
       '「添加商家」不再套用券的表单：只填品牌名即可创建商家（可先建商家、后再加券），空商家可删除',
       '新增券时自动记一条「新增」流水，使用记录页每行明确显示「新增了/使用了/退回了 XX券」+ 时间',
@@ -1890,7 +1896,7 @@
     return `<div class="vc-row clickable ${done ? 'vc-done' : ''}" data-action="detail" data-kind="voucher" data-id="${v.id}">
       <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
       <div class="vc-main">
-        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${done ? '<span class="vc-tag vc-usedup">已用完</span>' : ''}</div>
+        <div class="vc-name">${esc(v.name)}<button class="vc-edit" data-action="voucher-edit" data-id="${v.id}" aria-label="编辑券"><span class="ms">edit</span></button><span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${done ? '<span class="vc-tag vc-usedup">已用完</span>' : ''}</div>
         <div class="vc-meta">
           <span class="vc-exp" style="${expStyle}">${u.txt}</span>
           ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
@@ -1978,9 +1984,9 @@
       const emptyTxt = count ? '' : '<div class="muted text-center" style="padding:8px 0 2px;font-size:12px">暂无券，点下方「添加券」</div>';
       return `<div class="vb-card">
         <div class="vb-head clickable" data-action="vb-toggle" data-brand="${esc(b)}">
-          <div class="vb-logo" style="background:${color}15;color:${color}">${esc(char)}</div>
+          <div class="vb-logo" style="background:linear-gradient(150deg, ${color}cc, ${color}66);color:#fff">${esc(char)}</div>
           <div class="vb-info">
-            <div class="vb-name">${esc(b)}</div>
+            <div class="vb-name">${esc(b)}<button class="vb-edit" data-action="voucher-brand-edit" data-brand="${esc(b)}" aria-label="修改商家名"><span class="ms">edit</span></button></div>
             <div class="vb-meta">${count} 张券 · 剩 <span class="${remaining > 0 ? 'vb-rem' : 'vb-rem vb-rem-zero'}">${remaining}</span> 次${u ? ' · ' + expPill(u) : ''}</div>
           </div>
           <span class="vb-arrow ms">${collapsed ? 'expand_more' : 'expand_less'}</span>
@@ -2005,7 +2011,7 @@
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalRemaining}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
     ${emptyHTML}
-    <div style="padding-bottom:12px">${brandNames.map(brandBlock).join('')}</div>
+    <div style="padding:0 10px 12px">${brandNames.map(brandBlock).join('')}</div>
     ${newBrandForm || `<button class="vb-addrow vb-newbrand" data-action="va-open-new"><span class="ms" style="font-size:15px">add</span> 添加商家</button>`}
     <div style="height:20px"></div>`;
   }
@@ -3824,6 +3830,26 @@
       case 'voucher-edit':
         openVoucherEditSheet(state.vouchers.find((x) => x.id === el.dataset.id));
         break;
+      case 'voucher-brand-edit': {
+        const oldName = el.dataset.brand;
+        if (!oldName) break;
+        openSheet('修改商家名', `
+          <div class="field" style="margin:8px 0"><label>商家名</label><input id="vbe_name" value="${esc(oldName)}" placeholder="如 喜茶 / 瑞幸"></div>
+          <button class="btn btn-primary btn-block mt-lg" id="vbeSave">保存</button>`, (root) => {
+          root.querySelector('#vbeSave').addEventListener('click', () => {
+            const nn = root.querySelector('#vbe_name').value.trim();
+            if (!nn) return toast('请输入商家名');
+            if (nn !== oldName) {
+              // 同步独立商家与旗下所有券的品牌名
+              const vb = state.voucherBrands.find((x) => x.name === oldName);
+              if (vb) vb.name = nn;
+              state.vouchers.forEach((x) => { if ((x.brand || x.name) === oldName) x.brand = nn; });
+              persist(); closeSheet(); rerender(); toast('商家已改名');
+            } else closeSheet();
+          });
+        });
+        break;
+      }
       case 'voucher-brand-del': {
         const b = el.dataset.brand;
         if (!b) break;
