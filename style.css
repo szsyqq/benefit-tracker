@@ -626,6 +626,23 @@ ul, li { list-style: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; max-height: 108px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .chips::-webkit-scrollbar { display: none; }
 
+/* ─── 统一标签 pill（对齐信用卡 chip / cd-pill 的饱满质感）───
+   卡券 / 资产 / 知识库的卡片内标签统一用此视觉语言：
+   12px、weight 600、3px/10px 圆角胶囊、软色底+同色文字、无边框。 */
+.tag-pill {
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label); font-weight: 600;
+  padding: 3px 10px; border-radius: var(--r-full);
+  line-height: 1.4; white-space: nowrap;
+  background: var(--bg3); color: var(--txt2);
+}
+/* 状态色板（统一间接底 + 文字，避免各模块深浅不一） */
+.tag-pill.tp-active   { background: rgba(8,145,178,0.12); color: var(--t); }  /* 生效/正常 */
+.tag-pill.tp-soon     { background: rgba(230,81,0,0.12);  color: var(--warn); }
+.tag-pill.tp-expired  { background: rgba(186,26,26,0.10); color: var(--err); }
+.tag-pill.tp-lifetime { background: rgba(212,175,55,0.16); color: var(--p); }
+.tag-pill.tp-neutral  { background: var(--bg3); color: var(--txt2); }
+
 /* ─── Knowledge management tool grid ─── */
 .kg-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
@@ -884,8 +901,9 @@ ul, li { list-style: none; }
   font-size: 11px; color: var(--txt2); margin-top: 2px;
 }
 .vb-exp {
-  font-size: 10px; padding: 1px 7px; border-radius: 999px;
-  font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label); padding: 2px 9px; border-radius: 999px;
+  font-weight: 600; white-space: nowrap; line-height: 1.4;
 }
 .vb-add {
   width: 32px; height: 32px; min-width: 32px; border-radius: 50%;
@@ -945,9 +963,10 @@ ul, li { list-style: none; }
 }
 .vc-name > * { max-width: 100%; }
 .vc-tag {
-  font-size: 10px; font-weight: 500;
-  padding: 1px 7px; border-radius: 999px; white-space: nowrap;
-  flex-shrink: 0;
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label); font-weight: 600;
+  padding: 2px 9px; border-radius: var(--r-full); white-space: nowrap;
+  flex-shrink: 0; line-height: 1.4;
 }
 .vc-usedup {
   background: var(--bg3); color: var(--txt2);
@@ -956,12 +975,13 @@ ul, li { list-style: none; }
 .vc-done { opacity: .6; }
 .vc-done .vc-name { color: var(--txt2); }
 .vc-meta {
-  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
-  margin-top: 2px;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 3px;
 }
 .vc-exp {
-  font-size: 10px; padding: 1px 7px; border-radius: 999px;
-  font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label); padding: 2px 9px; border-radius: 999px;
+  font-weight: 600; white-space: nowrap; line-height: 1.4;
 }
 .vc-scope {
   font-size: 10px; color: var(--txt2);
@@ -1299,8 +1319,9 @@ ul, li { list-style: none; }
 /* ─── Category Tags ─── */
 .cat-tag {
   display: inline-flex; align-items: center;
-  padding: 2px 8px; border-radius: var(--r-full);
-  font-size: var(--fs-tiny); font-weight: 600;
+  padding: 3px 10px; border-radius: var(--r-full);
+  font-size: var(--fs-label); font-weight: 600;
+  line-height: 1.4;
   background: var(--bg3); color: var(--txt2);
 }
 .cat-tag.fitness { background: #fef3c7; color: #92400e; }
@@ -1713,14 +1734,15 @@ ul, li { list-style: none; }
 
 /* Expiry badges - same as ic-card */
 .kg-ic-expiry {
-  font-size: var(--fs-tiny); font-weight: 600;
-  padding: 2px 8px; border-radius: var(--r-full);
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label); font-weight: 600;
+  padding: 3px 10px; border-radius: var(--r-full);
   line-height: 1.4; white-space: nowrap;
 }
-.kg-ic-expiry.active { background: #d1fae5; color: #065f46; }
-.kg-ic-expiry.soon { background: #fff3e0; color: #e65100; }
-.kg-ic-expiry.expired { background: #ffebee; color: #c62828; }
-.kg-ic-expiry.lifetime { background: rgba(212,175,55,0.18); color: #735c00; }
+.kg-ic-expiry.active { background: rgba(8,145,178,0.12); color: var(--t); }
+.kg-ic-expiry.soon { background: rgba(230,81,0,0.12); color: var(--warn); }
+.kg-ic-expiry.expired { background: rgba(186,26,26,0.10); color: var(--err); }
+.kg-ic-expiry.lifetime { background: rgba(212,175,55,0.16); color: var(--p); }
 .kg-ic-expiry.neutral { background: var(--bg3); color: var(--txt2); }
 
 /* Empty state */
@@ -1914,9 +1936,10 @@ ul, li { list-style: none; }
 }
 
 .ic-card-tag {
-  font-size: var(--fs-tiny);
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label);
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 3px 10px;
   border-radius: var(--r-full);
   line-height: 1.4;
   white-space: nowrap;
@@ -1924,9 +1947,10 @@ ul, li { list-style: none; }
 }
 
 .ic-card-expiry {
-  font-size: var(--fs-tiny);
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-label);
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--r-full);
   line-height: 1.4;
   white-space: nowrap;
