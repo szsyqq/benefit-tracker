@@ -237,8 +237,13 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.80';
+  const APP_VERSION = '2.15.81';
   const CHANGELOG = [
+    { v: '2.15.81', date: '2026-08-28', tag: '修复', head: '信用卡权益同步到资产页 + 知识库条目列表编辑入口', items: [
+      '资产页新增「信用卡权益」分区：按卡汇总每张信用卡的全部权益（名称/标签/剩余次数/价值），新增权益即时可见',
+      '首页「信用卡」概览与权益快览本就读自实时 state，关闭弹窗即重渲染；信用卡权益现已在资产页同样可见',
+      '知识库列表每个条目新增编辑（铅笔）按钮，点按直接打开「编辑知识资源」页，无需先进入详情',
+    ]},
     { v: '2.15.80', date: '2026-08-28', tag: '优化', head: '视觉统一：各模块标签/徽标向信用卡界面看齐', items: [
       '卡券、资产、知识库的卡片内标签统一为「圆角胶囊 pill」质感：12px、字重 600、更饱满留白（对齐信用卡的 chip / 权益 pill 风格）',
       '统一状态色板：生效/即将到期/已过期/终身/中性 五态用同一套半透明底色 + 同色文字（资产、知识库原来深浅不一的色块已抹平）',
@@ -1641,7 +1646,7 @@
 
     const emptyBanner = (t) => `<div style="padding:24px 8px;color:var(--txt2);font-size:12px">${t}</div>`;
 
-    return `
+    let html = `
     ${tabTop('我的资产', `<button class="topbar-act" data-action="add-card" data-type="membership" aria-label="添加会员卡"><span class="ms">add</span></button>`)}
 
     ${bannerHero({
@@ -1658,6 +1663,45 @@
     <div class="card" style="padding:4px 0">${memList || emptyBanner('暂无会员卡，点右上角 + 添加')}</div>
 
     ${recordsBlock({ title: '全部流水', rows: assetTxns, targetId: 'assetFeed', row: feedRowHTML })}`;
+
+    html += renderAssetBenefits();
+    return html;
+  }
+
+  /* ============================================================
+   *  Assets hub — Credit-card benefits section
+   *  Surface every credit-card benefit on the assets page so that
+   *  adding a benefit (via 管理权益 on a credit card) is reflected
+   *  here as well, not only on the credit-card / home pages.
+   * ============================================================ */
+  function renderAssetBenefits() {
+    const cards = state.creditCards.filter((c) => c.benefits && c.benefits.length);
+    const totalCount = state.creditCards.reduce((s, c) => s + c.benefits.length, 0);
+    const totalRem = state.creditCards.reduce((s, c) => s + c.benefits.reduce((a, b) => a + (b.total - b.used), 0), 0);
+    const totalVal = state.creditCards.reduce((s, c) => s + c.benefits.reduce((a, b) => a + (b.value || 0), 0), 0);
+    if (!cards.length) {
+      return `<div class="section-head" style="margin-top:8px"><h2>信用卡权益</h2></div>
+        <div style="padding:20px 8px;color:var(--txt2);font-size:12px">暂无信用卡权益，去「信用卡」页添加</div>`;
+    }
+    const cardBlocks = cards.map((c) => {
+      const rows = c.benefits.map((b) => {
+        const tagT = BENEFIT_TAGS.find((t) => t.v === resolveBenefitTag(b));
+        const tagL = tagT ? tagT.l : '其他';
+        const rem = b.total - b.used;
+        const done = b.used >= b.total;
+        return `<div class="row-compact" style="cursor:default">
+          <div class="rc-dot ${done ? 'minus' : 'plus'}">${done ? '✓' : '✦'}</div>
+          <div class="rc-main"><div class="rc-title">${esc(b.name)}</div><div class="rc-sub">${esc(tagL)} · 剩 ${rem}/${b.total}</div></div>
+          ${b.value ? `<span class="rc-amt ${done ? '' : 'credit'}">${money2(b.value)}</span>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="card pad-sm" style="margin:8px 0 0">
+        <div class="t-body" style="font-weight:600;font-size:14px;padding-bottom:6px">${esc(c.bank)} · ${esc(c.name)}</div>
+        ${rows}
+      </div>`;
+    }).join('');
+    return `<div class="section-head" style="margin-top:8px"><h2>信用卡权益</h2><span class="muted" style="font-size:12px;font-weight:500">共 ${totalCount} 项 · 剩 ${totalRem} 次 · ${money2(totalVal)}</span></div>
+      ${cardBlocks}`;
   }
 
   /* ============================================================
@@ -2524,7 +2568,7 @@
                 <span class="ms">${icon}</span>
               </div>
             </div>
-            <div class="kg-ic-body">
+              <div class="kg-ic-body">
               <div class="kg-ic-name">${esc(k.title)}</div>
               <div class="kg-ic-sub">${kgTypeLabel(ktype)}</div>
               <div class="kg-ic-bottom">
@@ -2532,6 +2576,7 @@
                 <span class="kg-ic-expiry ${statusCls}">${statusLabel}</span>
               </div>
             </div>
+            <button class="kg-ic-edit" data-action="knowledge-edit" data-id="${k.id}" aria-label="编辑"><span class="ms">edit</span></button>
           </div>`;
         }).join('')
       : `<div class="kg-empty"><span class="ms">inventory_2</span><div class="kg-empty-text">暂无资源</div></div>`;
