@@ -237,8 +237,16 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.82';
+  const APP_VERSION = '2.15.83';
   const CHANGELOG = [
+    { v: '2.15.83', date: '2026-08-28', tag: '体验', head: '列表只留「核销」，双击进详情页调总数', items: [
+      '统一操作密度：卡券行、信用卡权益行默认只暴露一个「核销」按钮（点击即剩余次数 −1），不再堆「使用/回退」「总数±」等多按钮，列表恢复干净。',
+      '卡券新增独立详情页：双击券行进入，可调整总数/已用（或储值卡充值/核销）、看到期与适用范围、编辑与删除；原「使用/回退」「消费/退款」双按钮已从列表移除。',
+      '信用卡权益新增独立详情页：双击权益卡进入，可调整总数/已用、查看单次与剩余价值、编辑与删除；原权益卡上的四个按钮收敛为一个「核销」。',
+      '核销/总数等调整后停留在当前页（改用 rerender），不再被踢回列表或卡详情页；编辑弹窗保存后同样留在原页面。',
+      '修复资产页会员卡左滑「没遮挡干净」：.ic-card 自带 margin 导致 front 内缩、右侧永久露出编辑/删除按钮，现已填满 swipe 容器。',
+      '资产页「信用卡权益」标签改用与信用卡页同一套 .cd-pill（色点 + 半透明底），两处标签观感一致。',
+    ]},
     { v: '2.15.82', date: '2026-08-28', tag: '体验', head: '交互统一：会员卡/储值卡/卡券 对齐信用卡交互模型', items: [
       '统一设计语言：以信用卡页为基准，重构会员卡、储值卡、卡券的「交互逻辑」与「操作逻辑」——列表左滑出现 编辑/删除、详情页右上角 ⋮ 编辑进入编辑弹窗、添加走统一弹窗。',
       '会员卡/储值卡：修复详情页 ⋮ 按钮失效问题（原无 data-action），新增 openMembershipEditSheet 编辑弹窗（名称/类别/储值或按次/到期 + 删除）；资产页会员卡卡片支持左滑编辑/删除。',
@@ -1033,6 +1041,8 @@
       case 'vouchers': html = renderVouchers(); break;
       case 'voucherHistory': html = renderVoucherHistory(); break;
       case 'voucherBrand': html = renderVoucherBrand(r.param); break;
+      case 'voucherDetail': html = renderVoucherDetail(r.param); break;
+      case 'benefitDetail': html = renderBenefitDetail(r.param); break;
       case 'knowledgeDetail': html = renderKnowledgeDetail(r.param); break;
       case 'knowledge':
       case 'knowledgeSummary': html = renderKnowledgeSummary(); break;
@@ -1055,6 +1065,8 @@
       assets: 'assets', membershipDetail: 'assets',
       creditcards: 'credit', creditDetail: 'credit',
       vouchers: 'voucher', voucherBrand: 'voucher', voucherHistory: 'voucher',
+      voucherDetail: 'voucher',
+      benefitDetail: 'credit',
       knowledge: 'knowledge', knowledgeSummary: 'knowledge', knowledgeDetail: 'knowledge',
       knowledgeSubs: 'knowledge', knowledgePurchases: 'knowledge',
       knowledgeExpiry: 'knowledge',
@@ -1110,6 +1122,8 @@
       case 'vouchers': html = renderVouchers(); setActiveTab('voucher'); break;
       case 'voucherBrand': html = renderVoucherBrand(param); setActiveTab('voucher'); break;
       case 'voucherHistory': html = renderVoucherHistory(); setActiveTab('voucher'); break;
+      case 'voucherDetail': html = renderVoucherDetail(param); setActiveTab('voucher'); break;
+      case 'benefitDetail': html = renderBenefitDetail(param); setActiveTab('credit'); break;
       case 'knowledgeDetail': html = renderKnowledgeDetail(param); setActiveTab('knowledge'); break;
       case 'knowledge':
       case 'knowledgeSummary': html = renderKnowledgeSummary(); setActiveTab('knowledge'); break;
@@ -1564,7 +1578,7 @@
               <button class="btn btn-ghost btn-sm" data-action="merge-total-dec" data-cc="${ca.id}" data-benefit="${b.id}" ${b.total <= 1 ? 'disabled style="opacity:.4"' : ''}>总数 −</button>
               <button class="btn btn-ghost btn-sm" data-action="merge-total-inc" data-cc="${ca.id}" data-benefit="${b.id}">总数 ＋</button>
               <button class="btn btn-ghost btn-sm" data-action="merge-used-dec" data-cc="${ca.id}" data-benefit="${b.id}" ${b.used <= 0 ? 'disabled style="opacity:.4"' : ''}>撤销核销</button>
-              <button class="btn btn-gold btn-sm" data-action="merge-used-inc" data-cc="${ca.id}" data-benefit="${b.id}" ${done ? 'disabled style="opacity:.4"' : ''}>核销 ＋</button>
+              <button class="btn btn-gold btn-sm" data-action="merge-used-inc" data-cc="${ca.id}" data-benefit="${b.id}" ${done ? 'disabled style="opacity:.4"' : ''}>核销</button>
             </div>
           </div>`;
         }).join('');
@@ -1701,9 +1715,14 @@
         const tagL = tagT ? tagT.l : '其他';
         const rem = b.total - b.used;
         const done = b.used >= b.total;
+        // 与信用卡页 merge-row 保持同一套标签：色点 + 半透明底的 cd-pill
+        const dot = bankDotColor(c.bank);
         return `<div class="row-compact" style="cursor:default">
           <div class="rc-dot ${done ? 'minus' : 'plus'}">${done ? '✓' : '✦'}</div>
-          <div class="rc-main"><div class="rc-title">${esc(b.name)}</div><div class="rc-sub">${esc(tagL)} · 剩 ${rem}/${b.total}</div></div>
+          <div class="rc-main">
+            <div class="rc-title">${esc(b.name)}</div>
+            <div class="rc-sub"><span class="cd-pill" style="background:${dot}18"><span class="cd-dot" style="background:${dot}"></span>${esc(tagL)} ${rem}/${b.total}</span></div>
+          </div>
           ${b.value ? `<span class="rc-amt ${done ? '' : 'credit'}">${money2(b.value)}</span>` : ''}
         </div>`;
       }).join('');
@@ -1825,7 +1844,7 @@
           <button class="swipe-btn edit" data-action="benefit-edit" data-cc="${c.id}" data-benefit="${b.id}">编辑</button>
           <button class="swipe-btn del" data-action="benefit-delete" data-cc="${c.id}" data-benefit="${b.id}">删除</button>
         </div>
-        <div class="swipe-front benefit-card ${done ? 'used-up' : ''}">
+        <div class="swipe-front benefit-card ${done ? 'used-up' : ''}" data-dbl-action="benefit-detail" data-cc="${c.id}" data-benefit="${b.id}">
           <div class="benefit-top">
             <div class="ic-box sm ${done ? 'emerald' : ''}">${done ? '✓' : '✦'}</div>
             <div class="main">
@@ -1836,10 +1855,7 @@
           </div>
           <div class="progress thin ${done ? 'emerald' : ''}" style="margin-top:10px"><i style="width:${pct}%"></i></div>
           <div class="flex gap-xs benefit-ctrls">
-            <button class="btn btn-ghost btn-sm" data-action="benefit-total-dec" data-cc="${c.id}" data-benefit="${b.id}" ${b.total<=1?'disabled style="opacity:.4"':''}>总数 −</button>
-            <button class="btn btn-ghost btn-sm" data-action="benefit-total-inc" data-cc="${c.id}" data-benefit="${b.id}">总数 ＋</button>
-            <button class="btn btn-ghost btn-sm" data-action="benefit-used-dec" data-cc="${c.id}" data-benefit="${b.id}" ${b.used<=0?'disabled style="opacity:.4"':''}>撤销核销</button>
-            <button class="btn btn-gold btn-sm" data-action="benefit-used-inc" data-cc="${c.id}" data-benefit="${b.id}" ${done?'disabled style="opacity:.4"':''}>核销 ＋</button>
+            <button class="btn btn-gold btn-sm" style="flex:1" data-action="benefit-used-inc" data-cc="${c.id}" data-benefit="${b.id}" ${done?'disabled style="opacity:.4"':''}>核销</button>
           </div>
         </div>
       </div>`;
@@ -1893,6 +1909,7 @@
 
     <!-- Benefits list -->
     <div class="section-head"><h2>核心权益清单</h2><button class="btn btn-ghost btn-sm" data-action="manage-benefits" data-cc="${c.id}">＋ 添加</button></div>
+    <div class="muted" style="font-size:11px;margin:-4px var(--mx) 8px">双击权益卡进入详情可改总数 / 撤销核销 · 左滑编辑或删除</div>
     <div>${benefitsHTML}</div>
 
     <!-- Other perks (minor benefits) -->
@@ -1907,6 +1924,78 @@
           <div class="rc-main"><div class="rc-title">${esc(p.name)}</div><div class="rc-sub">${esc(p.note || '')}</div></div>
         </div>
       </div>`).join('')}</div>` : `<div class="muted text-center" style="padding:16px;margin:0 var(--mx)">暂无其他权益，点击「＋ 添加」记录小权益</div>`}`;
+  }
+
+  /* ============================================================
+   *  Page: Benefit Detail（双击权益卡进入）
+   *  权益行默认只暴露「核销」；总数 / 已用 / 价值的调整与删除收敛到本页。
+   *  param 格式：`信用卡id|权益id`
+   * ============================================================ */
+  function renderBenefitDetail(param) {
+    const [ccid, bid] = String(param || '').split('|');
+    const cc = state.creditCards.find((c) => c.id === ccid);
+    const b = cc && cc.benefits.find((bb) => bb.id === bid);
+    if (!cc || !b) { navigate('creditcards'); return ''; }
+    const rem = Math.max(0, b.total - b.used);
+    const pct = Math.min(100, Math.round((b.used / (b.total || 1)) * 100));
+    const done = b.used >= b.total;
+    const tagT = BENEFIT_TAGS.find((t) => t.v === resolveBenefitTag(b));
+    const tagL = tagT ? tagT.l : '其他';
+
+    const hist = (cc.history || [])
+      .filter((h) => (h.note || '').indexOf(b.name) >= 0)
+      .map((h) => ({ date: h.date, title: h.note, sub: cc.bank + '·' + cc.name, type: 'credit', val: h.value }))
+      .sort((x, y) => parse(y.date) - parse(x.date));
+
+    return `
+    ${hdr('权益详情', `<button class="topbar-act" data-action="benefit-edit" data-cc="${cc.id}" data-benefit="${b.id}" aria-label="编辑权益"><span class="ms" style="font-size:22px;color:var(--txt)">more_vert</span></button>`)}
+
+    <div class="card pad-sm" style="margin:4px var(--mx) 0">
+      <div class="flex items-center gap-sm">
+        <div class="ic-box sm ${done ? 'emerald' : ''}">${done ? '✓' : '✦'}</div>
+        <div style="flex:1;min-width:0">
+          <div class="t-body" style="font-weight:600;font-size:15px">${esc(b.name)}</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${esc(tagL)} · ${esc(cc.bank)} ${esc(cc.name)}</div>
+        </div>
+        <div class="text-right">
+          <div class="num-lg" style="margin:0">${rem}<span style="font-size:13px;color:var(--txt2)">/${b.total}</span></div>
+          <div class="muted" style="font-size:11px">剩余次数</div>
+        </div>
+      </div>
+      <div class="progress thin ${done ? 'emerald' : ''}" style="margin-top:10px"><i style="width:${pct}%"></i></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card pad-sm">
+        <div class="t-label" style="text-transform:none;color:var(--txt2)">单次价值</div>
+        <div class="num-md" style="margin-top:2px">${money2(b.value || 0)}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">已使用 ${b.used} 次</div>
+      </div>
+      <div class="card pad-sm">
+        <div class="t-label" style="text-transform:none;color:var(--txt2)">剩余价值</div>
+        <div class="num-md" style="margin-top:2px">${money2((b.value || 0) * rem)}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${pct}% 已核销</div>
+      </div>
+    </div>
+
+    <div class="section-head"><h2>调整</h2><span class="muted" style="font-size:11px">改总数 · 核销 / 撤销</span></div>
+    <div class="card pad-sm" style="margin:0 var(--mx)">
+      <div class="flex gap-sm">
+        <button class="btn btn-ghost btn-sm flex main justify-center" data-action="benefit-total-dec" data-cc="${cc.id}" data-benefit="${b.id}" ${b.total<=1?'disabled style="opacity:.4"':''}>总数 −</button>
+        <button class="btn btn-ghost btn-sm flex main justify-center" data-action="benefit-total-inc" data-cc="${cc.id}" data-benefit="${b.id}">总数 ＋</button>
+      </div>
+      <div class="flex gap-sm" style="margin-top:8px">
+        <button class="btn btn-ghost btn-sm flex main justify-center" data-action="benefit-used-dec" data-cc="${cc.id}" data-benefit="${b.id}" ${b.used<=0?'disabled style="opacity:.4"':''}>撤销核销</button>
+        <button class="btn btn-gold btn-sm flex main justify-center" data-action="benefit-used-inc" data-cc="${cc.id}" data-benefit="${b.id}" ${done?'disabled style="opacity:.4"':''}>核销</button>
+      </div>
+    </div>
+
+    ${recordsBlock({ title: '使用记录', rows: hist, targetId: 'bdFeed', row: feedRowHTML })}
+
+    <div style="padding:0 var(--mx) 8px">
+      <button class="btn btn-ghost btn-block" data-action="benefit-delete" data-cc="${cc.id}" data-benefit="${b.id}" style="color:#dc2626;border-color:#dc262633">删除这条权益</button>
+    </div>
+    <div style="height:20px"></div>`;
   }
 
   /* ============================================================
@@ -2001,8 +2090,7 @@
       const zero = bal <= 0;
       valHTML = `<span class="vc-val" style="${zero ? 'color:var(--txt2)' : ''}">¥${bal}</span>`;
       btns = `<div class="vc-btns">
-        <button class="vc-btn vc-use" data-action="voucher-use-amt" data-id="${v.id}">消费</button>
-        <button class="vc-btn vc-back" data-action="voucher-use-dec-amt" data-id="${v.id}" ${zero ? 'disabled' : ''}>退款</button>
+        <button class="vc-btn vc-use" data-action="voucher-use-amt" data-id="${v.id}" ${zero ? 'disabled' : ''}>核销</button>
       </div>`;
       extraTag = zero ? '<span class="vc-tag vc-usedup">余额为0</span>' : '';
     } else {
@@ -2011,8 +2099,7 @@
       const ruleTxt = meta.rule && v.threshold ? `<span class="vc-tag" style="background:#ea580c18;color:#ea580c">满${v.threshold}减${v.discount}</span>` : '';
       valHTML = `<span class="vc-val">${done ? '<span style="color:var(--txt2)">0</span>' : remaining}<em>/${v.totalUses}</em></span>`;
       btns = `<div class="vc-btns">
-        <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${done ? 'disabled' : ''}>使用</button>
-        <button class="vc-btn vc-back" data-action="voucher-use-dec" data-id="${v.id}" ${v.usedUses <= 0 ? 'disabled' : ''}>回退</button>
+        <button class="vc-btn vc-use" data-action="voucher-use" data-id="${v.id}" ${done ? 'disabled' : ''}>核销</button>
       </div>`;
       extraTag = ruleTxt;
     }
@@ -2021,7 +2108,7 @@
         <button class="swipe-btn edit" data-action="voucher-edit" data-id="${v.id}">编辑</button>
         <button class="swipe-btn del" data-action="voucher-del" data-id="${v.id}">删除</button>
       </div>
-      <div class="swipe-front vc-row clickable ${isAmt && bal <= 0 ? 'vc-done' : ''}" data-action="detail" data-kind="voucher" data-id="${v.id}">
+      <div class="swipe-front vc-row clickable ${isAmt && bal <= 0 ? 'vc-done' : ''}" data-dbl-action="voucher-detail" data-id="${v.id}">
         <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
         <div class="vc-main">
           <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${extraTag}</div>
@@ -2149,6 +2236,7 @@
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">¥${totalStored}</div><div class="muted" style="font-size:11px">储值余额</div></div>
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalCountRem}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
+    <div class="muted text-center" style="font-size:11px;margin:-2px 0 8px">双击券进入详情可改总数 · 左滑编辑 / 删除</div>
     ${emptyHTML}
     <div style="padding:0 10px 12px">${brandNames.map(brandBlock).join('')}</div>
     <button class="vb-addrow vb-newbrand" data-action="voucher-add-new"><span class="ms" style="font-size:15px">add</span> 添加商家</button>
@@ -2172,6 +2260,95 @@
     </div>
     <div class="vb-body" style="margin:0 var(--mx);background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sh-card);padding:6px 12px 12px">${emptyHTML}${items.map(voucherCardHTML).join('')}
       <button class="vb-addrow" data-action="voucher-add" data-brand="${esc(brand)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
+    </div>
+    <div style="height:20px"></div>`;
+  }
+
+  /* ============================================================
+   *  Page: Voucher Detail（双击券行进入）
+   *  设计语言统一：列表行默认只暴露「核销」一个操作；总次数 / 余额
+   *  的调整、编辑与删除全部收敛到本页，避免列表被多按钮淹没。
+   * ============================================================ */
+  function renderVoucherDetail(id) {
+    const v = state.vouchers.find((x) => x.id === id);
+    if (!v) { navigate('vouchers'); return ''; }
+    const u = urgency(v.expiry);
+    const meta = vTypeMeta(v);
+    const isAmt = vMode(v) === 'amount';
+    const bal = Number(v.balance) || 0;
+    const total = v.totalUses || 1;
+    const used = v.usedUses || 0;
+    const rem = Math.max(0, total - used);
+    const pct = isAmt ? 0 : Math.min(100, Math.round((used / (total || 1)) * 100));
+    const statusCls = u.level === 'urgent' ? 'expired' : u.level === 'soon' ? 'soon' : 'active';
+    const statusTxt = v.expiry ? u.txt : '无到期';
+
+    const adjustHTML = isAmt
+      ? `<div class="flex gap-sm">
+          <button class="btn btn-ghost btn-sm flex main justify-center" data-action="voucher-topup" data-id="${v.id}">充值 ＋</button>
+          <button class="btn btn-gold btn-sm flex main justify-center" data-action="voucher-use-amt" data-id="${v.id}" ${bal <= 0 ? 'disabled style="opacity:.4"' : ''}>核销</button>
+        </div>`
+      : `<div class="flex gap-sm">
+          <button class="btn btn-ghost btn-sm flex main justify-center" data-action="voucher-total-dec" data-id="${v.id}" ${total <= 1 ? 'disabled style="opacity:.4"' : ''}>总数 −</button>
+          <button class="btn btn-ghost btn-sm flex main justify-center" data-action="voucher-total-inc" data-id="${v.id}">总数 ＋</button>
+        </div>
+        <div class="flex gap-sm" style="margin-top:8px">
+          <button class="btn btn-ghost btn-sm flex main justify-center" data-action="voucher-use-dec" data-id="${v.id}" ${used <= 0 ? 'disabled style="opacity:.4"' : ''}>撤销核销</button>
+          <button class="btn btn-gold btn-sm flex main justify-center" data-action="voucher-use" data-id="${v.id}" ${rem <= 0 ? 'disabled style="opacity:.4"' : ''}>核销</button>
+        </div>`;
+
+    const txns = (v.transactions || [])
+      .map((t) => ({
+        date: t.date,
+        title: t.note || (t.kind === 'topup' ? '充值' : '使用'),
+        sub: v.name,
+        type: 'txn',
+        val: t.kind === 'topup' ? (Number(t.amount) || 0) : -(Math.abs(Number(t.amount)) || 0),
+      }))
+      .sort((a, b) => parse(b.date) - parse(a.date));
+
+    return `
+    ${hdr('券详情', `<button class="topbar-act" data-action="voucher-edit" data-id="${v.id}" aria-label="编辑"><span class="ms" style="font-size:22px;color:var(--txt)">more_vert</span></button>`)}
+
+    <div class="card pad-sm" style="margin:4px var(--mx) 0">
+      <div class="flex items-center gap-sm">
+        <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:20px">${meta.icon}</span></div>
+        <div style="flex:1;min-width:0">
+          <div class="t-body" style="font-weight:600;font-size:15px">${esc(v.name)}</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${esc(v.brand || '—')} · ${meta.l}</div>
+        </div>
+        <div class="text-right">
+          ${isAmt
+            ? `<div class="num-lg" style="margin:0">¥${bal}</div><div class="muted" style="font-size:11px">当前余额</div>`
+            : `<div class="num-lg" style="margin:0">${rem}<span style="font-size:13px;color:var(--txt2)">/${total}</span></div><div class="muted" style="font-size:11px">剩余次数</div>`}
+        </div>
+      </div>
+      ${isAmt ? '' : `<div class="progress thin" style="margin-top:10px"><i style="width:${pct}%"></i></div>`}
+    </div>
+
+    <div class="grid-2">
+      <div class="card pad-sm">
+        <div class="t-label" style="text-transform:none;color:var(--txt2)">到期日</div>
+        <div class="num-md" style="margin-top:2px">${v.expiry ? fmtDateCN(parse(v.expiry)) : '无到期'}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px"><span class="ic-card-expiry ${statusCls}">${statusTxt}</span></div>
+      </div>
+      <div class="card pad-sm">
+        <div class="t-label" style="text-transform:none;color:var(--txt2)">${isAmt ? '类别' : '已用 / 总次数'}</div>
+        <div class="num-md" style="margin-top:2px">${isAmt ? meta.l : used + ' / ' + total}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${isAmt ? '储值型' : '已核销 ' + pct + '%'}</div>
+      </div>
+    </div>
+
+    ${v.scope ? `<div class="card pad-sm" style="margin:0 var(--mx)"><div class="t-label" style="text-transform:none;color:var(--txt2)">适用范围</div><div class="t-body" style="margin-top:2px">📍 ${esc(v.scope)}</div></div>` : ''}
+    ${v.note ? `<div class="card pad-sm" style="margin:8px var(--mx) 0"><div class="t-label" style="text-transform:none;color:var(--txt2)">备注</div><div class="t-body" style="margin-top:2px">${esc(v.note)}</div></div>` : ''}
+
+    <div class="section-head"><h2>调整</h2><span class="muted" style="font-size:11px">${isAmt ? '充值 / 核销' : '改总数 · 核销 / 撤销'}</span></div>
+    <div class="card pad-sm" style="margin:0 var(--mx)">${adjustHTML}</div>
+
+    ${recordsBlock({ title: '使用记录', rows: txns, targetId: 'vdFeed', row: feedRowHTML })}
+
+    <div style="padding:0 var(--mx) 8px">
+      <button class="btn btn-ghost btn-block" data-action="voucher-del" data-id="${v.id}" style="color:#dc2626;border-color:#dc262633">删除这张券</button>
     </div>
     <div style="height:20px"></div>`;
   }
@@ -2369,7 +2546,7 @@
           if (m.rule) { obj.threshold = Math.max(0, Number(root.querySelector('#vf_thr').value) || 0); obj.discount = Math.max(0, Number(root.querySelector('#vf_dis').value) || 0); }
         }
         Object.assign(v, obj);
-        persist(); closeSheet(); navigate('vouchers'); toast('已保存');
+        persist(); closeSheet(); rerender(); toast('已保存');
       });
     });
   }
@@ -3301,7 +3478,7 @@
         b.total = Math.max(1, Number(root.querySelector('#b_total').value) || 1);
         b.used = Math.min(b.total, Math.max(0, Number(root.querySelector('#b_used').value) || 0));
         b.value = Number(root.querySelector('#b_val').value) || 0;
-        persist(); closeSheet(); toast('已保存'); navigate('creditDetail', ccid);
+        persist(); closeSheet(); toast('已保存'); rerender();
       });
     });
   }
@@ -3747,7 +3924,7 @@
           b.used++;
           cc.history.push({ date: nowDT(), note: '核销 · ' + b.name, value: b.value });
           if (b.used === b.total) toast('权益已用完');
-          persist(); navigate('creditDetail', ccid);
+          persist(); rerender();
         }
         break;
       }
@@ -3757,7 +3934,7 @@
         if (cc && b && b.used > 0) {
           b.used--;
           cc.history.push({ date: nowDT(), note: '退回核销 · ' + b.name, value: -b.value });
-          persist(); navigate('creditDetail', cc.id);
+          persist(); rerender();
         }
         break;
       }
@@ -3770,7 +3947,7 @@
           b.total = Math.max(1, b.total + d);
           if (b.used > b.total) b.used = b.total;
           cc.history.push({ date: nowDT(), note: (d > 0 ? '增加总次数' : '减少总次数') + ' · ' + b.name + ' (' + (d > 0 ? '+' : '−') + '1)', value: null });
-          persist(); navigate('creditDetail', cc.id);
+          persist(); rerender();
         }
         break;
       }
@@ -4033,6 +4210,28 @@
         persist(); rerender(); toast('已退款 ¥' + amt + '，余额 ¥' + v.balance);
         break;
       }
+      case 'voucher-total-inc':
+      case 'voucher-total-dec': {
+        const v = state.vouchers.find((x) => x.id === el.dataset.id);
+        if (!v) break;
+        const d = act === 'voucher-total-inc' ? 1 : -1;
+        v.totalUses = Math.max(1, (Number(v.totalUses) || 1) + d);
+        if ((Number(v.usedUses) || 0) > v.totalUses) v.usedUses = v.totalUses;
+        persist(); rerender(); toast('总次数 ' + (d > 0 ? '+1' : '−1') + '，共 ' + v.totalUses + ' 次');
+        break;
+      }
+      case 'voucher-topup': {
+        const v = state.vouchers.find((x) => x.id === el.dataset.id);
+        if (!v) break;
+        const raw = prompt('充值金额（元）：', '0');
+        if (raw === null) break;
+        const amt = Math.max(0, Number(raw) || 0);
+        if (amt <= 0) return toast('请输入大于 0 的金额');
+        v.balance = (Number(v.balance) || 0) + amt;
+        (v.transactions = v.transactions || []).push({ id: uid(), date: nowDT(), kind: 'topup', amount: amt, note: '充值 ¥' + amt });
+        persist(); rerender(); toast('已充值 ¥' + amt + '，余额 ¥' + v.balance);
+        break;
+      }
       case 'voucher-edit':
         openVoucherEditSheet(state.vouchers.find((x) => x.id === el.dataset.id));
         break;
@@ -4275,6 +4474,12 @@
     const act = el.dataset.dblAction;
     const id = el.dataset.id;
     const brand = el.dataset.brand;
+    if (act === 'voucher-detail' && id) { navigate('voucherDetail', id); return; }
+    if (act === 'benefit-detail') {
+      const ccid = el.dataset.cc, bid = el.dataset.benefit;
+      if (ccid && bid) navigate('benefitDetail', ccid + '|' + bid);
+      return;
+    }
     if (act === 'voucher-brand-edit' && brand) {
       const oldName = brand;
       openSheet('修改商家名', `
