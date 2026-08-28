@@ -237,8 +237,14 @@
   /* ============================================================
    *  Version & Changelog
    * ============================================================ */
-  const APP_VERSION = '2.15.81';
+  const APP_VERSION = '2.15.82';
   const CHANGELOG = [
+    { v: '2.15.82', date: '2026-08-28', tag: '体验', head: '交互统一：会员卡/储值卡/卡券 对齐信用卡交互模型', items: [
+      '统一设计语言：以信用卡页为基准，重构会员卡、储值卡、卡券的「交互逻辑」与「操作逻辑」——列表左滑出现 编辑/删除、详情页右上角 ⋮ 编辑进入编辑弹窗、添加走统一弹窗。',
+      '会员卡/储值卡：修复详情页 ⋮ 按钮失效问题（原无 data-action），新增 openMembershipEditSheet 编辑弹窗（名称/类别/储值或按次/到期 + 删除）；资产页会员卡卡片支持左滑编辑/删除。',
+      '卡券：列表行改为左滑出现 编辑/删除（替代原先隐藏的双击编辑）；新增 openVoucherAddSheet 统一弹窗添加（替代原先的内联表单）；「添加商家」改为弹窗录入品牌名。',
+      '知识库已较对齐（列表编辑入口 + 详情编辑 + 左滑删除），本版维持其交互，仅校正按钮词汇一致性。',
+    ]},
     { v: '2.15.81', date: '2026-08-28', tag: '修复', head: '信用卡权益同步到资产页 + 知识库条目列表编辑入口', items: [
       '资产页新增「信用卡权益」分区：按卡汇总每张信用卡的全部权益（名称/标签/剩余次数/价值），新增权益即时可见',
       '首页「信用卡」概览与权益快览本就读自实时 state，关闭弹窗即重渲染；信用卡权益现已在资产页同样可见',
@@ -1625,21 +1631,27 @@
       const expired = m.expiry && daysLeft(m.expiry) < 0;
       const statusLabel = m.lifetime ? '终身' : (m.expiry ? u.txt : '无到期');
       const statusCls = expired ? 'expired' : (m.lifetime ? 'lifetime' : u.level === 'soon' ? 'soon' : 'active');
-      return `<div class="ic-card clickable" data-action="detail" data-kind="membership" data-id="${m.id}">
-        <div class="ic-card-left">
-          <div class="ic-card-logo">
-            ${brandLogo(m.name, 'sm', c.c)}
-          </div>
-          <div class="ic-card-info">
-            <div class="ic-card-name">${esc(m.name)}</div>
-            <div class="ic-card-tags">
-              <span class="ic-card-tag" style="background:${c.c}18;color:${c.c}">${c.l}</span>
-              <span class="ic-card-expiry ${statusCls}">${statusLabel}</span>
+      return `<div class="swipe" data-swipe>
+        <div class="swipe-actions">
+          <button class="swipe-btn edit" data-action="mem-edit" data-id="${m.id}">编辑</button>
+          <button class="swipe-btn del" data-action="mem-del" data-id="${m.id}">删除</button>
+        </div>
+        <div class="swipe-front ic-card clickable" data-action="detail" data-kind="membership" data-id="${m.id}">
+          <div class="ic-card-left">
+            <div class="ic-card-logo">
+              ${brandLogo(m.name, 'sm', c.c)}
+            </div>
+            <div class="ic-card-info">
+              <div class="ic-card-name">${esc(m.name)}</div>
+              <div class="ic-card-tags">
+                <span class="ic-card-tag" style="background:${c.c}18;color:${c.c}">${c.l}</span>
+                <span class="ic-card-expiry ${statusCls}">${statusLabel}</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="ic-card-right">
-          <div class="ic-card-value">${valLabel}</div>
+          <div class="ic-card-right">
+            <div class="ic-card-value">${valLabel}</div>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -1920,7 +1932,7 @@
     const txns = txnsSorted.map((tx, i) => txnRow(tx, i)).join('');
 
     return `
-    ${hdr(esc(m.name), `<span class="ms topbar-act" style="color:var(--txt2)">more_vert</span>`)}
+    ${hdr(esc(m.name), `<button class="topbar-act" data-action="mem-edit" data-id="${m.id}" aria-label="编辑会员卡"><span class="ms" style="color:var(--txt)">more_vert</span></button>`)}
 
     <div class="seg-ctl">
       <div class="opt ${memberSeg === 'balance' ? 'active' : ''}" data-action="mem-seg" data-seg="balance">余额管理</div>
@@ -2004,18 +2016,24 @@
       </div>`;
       extraTag = ruleTxt;
     }
-    return `<div class="vc-row clickable ${isAmt && bal <= 0 ? 'vc-done' : ''}" data-kind="voucher" data-id="${v.id}">
-      <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
-      <div class="vc-main" data-dbl-action="voucher-edit" data-id="${v.id}">
-        <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${extraTag}</div>
-        <div class="vc-meta">
-          <span class="vc-exp" style="${expStyle}">${u.txt}</span>
-          ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
-        </div>
+    return `<div class="swipe" data-swipe>
+      <div class="swipe-actions">
+        <button class="swipe-btn edit" data-action="voucher-edit" data-id="${v.id}">编辑</button>
+        <button class="swipe-btn del" data-action="voucher-del" data-id="${v.id}">删除</button>
       </div>
-      <div class="vc-right">
-        ${btns}
-        ${valHTML}
+      <div class="swipe-front vc-row clickable ${isAmt && bal <= 0 ? 'vc-done' : ''}" data-action="detail" data-kind="voucher" data-id="${v.id}">
+        <div class="vc-ic" style="background:${meta.color}15;color:${meta.color}"><span class="ms" style="font-size:17px">${meta.icon}</span></div>
+        <div class="vc-main">
+          <div class="vc-name">${esc(v.name)}<span class="vc-tag" style="background:${meta.color}18;color:${meta.color}">${meta.l}</span>${extraTag}</div>
+          <div class="vc-meta">
+            <span class="vc-exp" style="${expStyle}">${u.txt}</span>
+            ${v.scope ? `<span class="vc-scope">📍 ${esc(v.scope)}</span>` : ''}
+          </div>
+        </div>
+        <div class="vc-right">
+          ${btns}
+          ${valHTML}
+        </div>
       </div>
     </div>`;
   }
@@ -2100,7 +2118,6 @@
       const color = meta.color;
       const char = (b || '商').slice(0, 1);
       const collapsed = !!voucherCollapsed[b];
-      const formOpen = vAddForm && vAddForm.brand === b;
       const emptyTxt = count ? '' : '<div class="muted text-center" style="padding:8px 0 2px;font-size:12px">暂无券，点下方「添加券」</div>';
       return `<div class="vb-card">
         <div class="vb-head clickable" data-action="vb-toggle" data-brand="${esc(b)}">
@@ -2113,8 +2130,7 @@
         </div>
         ${collapsed ? '' : `<div class="vb-body">
           ${emptyTxt}${items.map(voucherCardHTML).join('')}
-          ${formOpen ? voucherAddFormHTML(b) : ''}
-          <button class="vb-addrow" data-action="va-open" data-brand="${esc(b)}"><span class="ms" style="font-size:14px">add</span> 添加券</button>
+          <button class="vb-addrow" data-action="voucher-add" data-brand="${esc(b)}"><span class="ms" style="font-size:14px">add</span> 添加券</button>
           ${count === 0 ? `<button class="vb-addrow vb-branddel" data-action="voucher-brand-del" data-brand="${esc(b)}"><span class="ms" style="font-size:14px">delete</span> 删除商家</button>` : ''}
         </div>`}
       </div>`;
@@ -2126,7 +2142,6 @@
     const expiringCount = state.vouchers.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
     const hasAny = state.vouchers.length || (state.voucherBrands || []).length;
     const emptyHTML = hasAny ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">暂无卡/票，点下方「添加商家」开始</div>';
-    const newBrandForm = (vAddForm && vAddForm.brand === '') ? voucherAddFormHTML('') : '';
     return `${tabTop('卡 / 票', `<button class="topbar-act" data-action="voucher-history" aria-label="使用记录"><span class="ms">history</span></button>`)}
     <div class="card" style="padding:12px var(--mx);margin:4px var(--mx) 8px;display:flex;gap:8px;justify-content:space-around;text-align:center">
       <div><div class="num-hero" style="font-size:20px;margin:0">${state.vouchers.length}</div><div class="muted" style="font-size:11px">全部券</div></div>
@@ -2136,7 +2151,7 @@
     </div>
     ${emptyHTML}
     <div style="padding:0 10px 12px">${brandNames.map(brandBlock).join('')}</div>
-    ${newBrandForm || `<button class="vb-addrow vb-newbrand" data-action="va-open-new"><span class="ms" style="font-size:15px">add</span> 添加商家</button>`}
+    <button class="vb-addrow vb-newbrand" data-action="voucher-add-new"><span class="ms" style="font-size:15px">add</span> 添加商家</button>
     <div style="height:20px"></div>`;
   }
 
@@ -2146,7 +2161,6 @@
     items.sort((a, b) => daysLeft(a.expiry || '2099-12-31') - daysLeft(b.expiry || '2099-12-31'));
     const totalRemaining = items.reduce((s, v) => s + vRemaining(v), 0);
     const expiring = items.filter((v) => daysLeft(v.expiry || '2099-12-31') <= 7).length;
-    const formOpen = vAddForm && vAddForm.brand === brand;
     const emptyHTML = items.length ? '' : '<div class="muted text-center" style="padding:30px;font-size:14px">该商家暂无券</div>';
     return `<div class="topbar">
       <div class="topbar-back"><span class="back-btn ms" data-action="back" style="cursor:pointer">arrow_back</span><span class="topbar-title">${esc(brand)}</span></div>
@@ -2157,8 +2171,7 @@
       <div><div class="num-hero" style="font-size:20px;margin:0;color:var(--t)">${totalRemaining}</div><div class="muted" style="font-size:11px">剩余次数</div></div>
     </div>
     <div class="vb-body" style="margin:0 var(--mx);background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sh-card);padding:6px 12px 12px">${emptyHTML}${items.map(voucherCardHTML).join('')}
-      ${formOpen ? voucherAddFormHTML(brand) : ''}
-      <button class="vb-addrow" data-action="va-open" data-brand="${esc(brand)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
+      <button class="vb-addrow" data-action="voucher-add" data-brand="${esc(brand)}"><span class="ms" style="font-size:15px">add</span> 添加券</button>
     </div>
     <div style="height:20px"></div>`;
   }
@@ -2215,6 +2228,85 @@
     return `<div class="seg-ctl" data-vt-seg style="gap:4px">${opts}</div>`;
   }
   const voucherTypeOf = (root) => { const el = (root || document).querySelector('.seg-ctl .opt.active'); return el ? el.dataset.vt : 'coupon'; };
+
+  /* Add a new voucher/card/ticket under a brand. Sheet-based (mirrors the
+     credit-card "添加权益" flow) so the add interaction is consistent across
+     entity types. Replaces the previous inline add form. */
+  function openVoucherAddSheet(brand) {
+    const isNewBrand = !brand;
+    const fields = FIELDS_FOR_TYPE.coupon || ['count'];
+    const fieldBlock = (key, html) => `<div class="va-fields" data-fields="${key}"${fields.includes(key) ? '' : ' hidden'}>${html}</div>`;
+    const body = `
+      <div class="field" style="margin:8px 0"><label>品牌 <small style="color:var(--err)">*</small></label><input id="vf_brand" value="${isNewBrand ? '' : esc(brand)}" placeholder="如 瑞幸 / 星巴克" ${isNewBrand ? '' : 'readonly'}></div>
+      <div class="field"><label>名称 <small style="color:var(--err)">*</small></label><input id="vf_name" placeholder="如 满减券 / 2次卡"></div>
+      <div class="field"><label>类型</label>${voucherTypeSeg('coupon')}</div>
+      ${fieldBlock('count', `<div class="flex gap-sm">
+        <div class="field" style="flex:1"><label>总次数</label><input id="vf_uses" type="number" value="1"></div>
+        <div class="field" style="flex:1"><label>已用次数</label><input id="vf_used" type="number" value="0"></div>
+      </div>`)}
+      ${fieldBlock('amount', `<div class="field"><label>初始余额（元）</label><input id="vf_balance" type="number" value="0" min="0"></div>`)}
+      ${fieldBlock('rule', `<div class="flex gap-sm">
+        <div class="field" style="flex:1"><label>满（元）</label><input id="vf_thr" type="number" value="0" min="0"></div>
+        <div class="field" style="flex:1"><label>减（元）</label><input id="vf_dis" type="number" value="0" min="0"></div>
+      </div>`)}
+      <div class="field"><label>到期日</label><input id="vf_exp" type="date"></div>
+      <div class="field"><label>适用范围（选填）</label><input id="vf_scope" placeholder="如 全国门店、限自提、满 25 可用"></div>
+      <button class="btn btn-primary btn-block mt-lg" id="vfAdd">保存</button>`;
+    openSheet(isNewBrand ? '新建商家并添加券' : '添加券', body, (root) => {
+      root.querySelectorAll('[data-vt-opt]').forEach((opt) => opt.addEventListener('click', () => {
+        const seg = root.querySelector('[data-vt-seg]');
+        seg.querySelectorAll('[data-vt-opt]').forEach((x) => x.classList.remove('active'));
+        opt.classList.add('active');
+        const t = opt.dataset.vt;
+        root.querySelectorAll('.va-fields').forEach((f) => { f.hidden = true; });
+        (FIELDS_FOR_TYPE[t] || ['count']).forEach((k) => {
+          const g = root.querySelector('.va-fields[data-fields="' + k + '"]');
+          if (g) g.hidden = false;
+        });
+      }));
+      root.querySelector('#vfAdd').addEventListener('click', () => {
+        const brandName = (root.querySelector('#vf_brand').value || '').trim();
+        if (!brandName) return toast('请输入品牌名');
+        if (!state.voucherBrands.some((x) => x.name === brandName)) state.voucherBrands.push({ id: uid(), name: brandName });
+        const name = root.querySelector('#vf_name').value.trim();
+        if (!name) return toast('请输入名称');
+        const type = voucherTypeOf(root);
+        const m = VOUCHER_TYPES[type] || VOUCHER_TYPES.coupon;
+        const expiry = root.querySelector('#vf_exp').value || '';
+        const scope = root.querySelector('#vf_scope').value.trim() || '';
+        const obj = { id: uid(), name, brand: brandName, type, expiry, scope, note: '', color: m.cat, transactions: [] };
+        if (m.mode === 'amount') {
+          const bal = Math.max(0, Number(root.querySelector('#vf_balance').value) || 0);
+          obj.balance = bal; obj.totalUses = 1; obj.usedUses = 0;
+          obj.transactions.push({ id: uid(), date: nowDT(), kind: 'add', amount: bal, note: '新增储值卡，余额 ¥' + bal });
+        } else {
+          const totalUses = Math.max(1, Number(root.querySelector('#vf_uses').value) || 1);
+          const usedUses = Math.max(0, Math.min(Number(root.querySelector('#vf_used').value) || 0, totalUses));
+          obj.totalUses = totalUses; obj.usedUses = usedUses;
+          if (m.rule) { obj.threshold = Math.max(0, Number(root.querySelector('#vf_thr').value) || 0); obj.discount = Math.max(0, Number(root.querySelector('#vf_dis').value) || 0); }
+          obj.transactions.push({ id: uid(), date: nowDT(), kind: 'add', amount: 0, note: '新增券' });
+        }
+        state.vouchers.push(obj);
+        persist(); closeSheet(); navigate('vouchers'); toast('已添加「' + name + '」');
+      });
+    });
+  }
+
+  /* Create an empty brand (merchant) with no vouchers yet — mirrors the old
+     "添加商家" entry point, but as a sheet. */
+  function openVoucherBrandSheet() {
+    openSheet('添加商家', `
+      <div class="field" style="margin:8px 0"><label>品牌名 <small style="color:var(--err)">*</small></label><input id="vbn" placeholder="如 喜茶 / 瑞幸"></div>
+      <button class="btn btn-primary btn-block mt-lg" id="vbnSave">创建商家</button>`, (root) => {
+      root.querySelector('#vbnSave').addEventListener('click', () => {
+        const n = root.querySelector('#vbn').value.trim();
+        if (!n) return toast('请输入品牌名');
+        if (state.voucherBrands.some((x) => x.name === n)) return toast('商家「' + n + '」已存在');
+        state.voucherBrands.push({ id: uid(), name: n });
+        persist(); closeSheet(); navigate('vouchers'); toast('已添加商家「' + n + '」');
+      });
+    });
+  }
 
   function openVoucherEditSheet(v) {
     if (!v) return;
@@ -3349,6 +3441,72 @@
     });
   }
 
+  /* Edit a membership / stored-value card (name / category / balance-or-uses /
+     expiry) and optionally delete it. Modeled on openCardEditSheet so the
+     membership detail page shares the same ⋮-edit-entry interaction as the
+     credit-card detail page. The delete button uses a direct listener (no
+     data-action) to avoid the global delegated handler double-firing inside a sheet. */
+  function openMembershipEditSheet(m) {
+    if (!m) return;
+    const cats = Object.keys(CAT).filter((k) => k !== 'credit');
+    const catOpts = cats.map((k) => `<option value="${k}" ${m.category === k ? 'selected' : ''}>${CAT[k].l}</option>`).join('');
+    const isStore = m.totalUses <= 1;
+    const body = `
+      <div class="field"><label>名称</label><input id="me_name" value="${esc(m.name)}"></div>
+      <div class="field"><label>类别</label><select id="me_cat">${catOpts}</select></div>
+      <div class="seg-ctl" id="meTypeSeg">
+        <div class="opt ${isStore ? 'active' : ''}" data-mt="balance">储值型</div>
+        <div class="opt ${isStore ? '' : 'active'}" data-mt="usage">按次型</div>
+      </div>
+      <div id="meBalanceField" style="margin-top:10px">
+        <div class="field"><label>当前余额 (元)</label><input id="me_bal" type="number" value="${m.balance || 0}"></div>
+      </div>
+      <div id="meUsageField" style="margin-top:10px${isStore ? ';display:none' : ''}">
+        <div class="flex gap-sm">
+          <div class="field" style="flex:1"><label>总次数</label><input id="me_uses" type="number" value="${m.totalUses || 1}"></div>
+          <div class="field" style="flex:1"><label>已用次数</label><input id="me_used" type="number" value="${m.usedUses || 0}"></div>
+        </div>
+      </div>
+      <div class="field"><label>到期日</label><input id="me_exp" type="date" value="${esc(m.expiry || '')}"></div>
+      <div class="flex gap-sm mt-lg">
+        <button class="btn btn-primary flex main justify-center" id="meSave">保存修改</button>
+        <button class="btn btn-ghost flex main justify-center" id="meDel" style="color:#dc2626;border-color:#dc262633">删除</button>
+      </div>`;
+    openSheet('编辑会员卡 / 储值卡', body, (root) => {
+      const seg = root.querySelector('#meTypeSeg');
+      seg.addEventListener('click', (e) => {
+        const o = e.target.closest('.opt'); if (!o) return;
+        seg.querySelectorAll('.opt').forEach((el) => el.classList.remove('active'));
+        o.classList.add('active');
+        const isB = o.dataset.mt === 'balance';
+        root.querySelector('#meBalanceField').style.display = isB ? '' : 'none';
+        root.querySelector('#meUsageField').style.display = isB ? 'none' : '';
+      });
+      root.querySelector('#meDel').addEventListener('click', () => {
+        if (!confirm('确认删除「' + m.name + '」？此操作不可撤销')) return;
+        state.memberships = state.memberships.filter((x) => x.id !== m.id);
+        persist(); closeSheet(); navigate('assets'); toast('已删除：' + m.name);
+      });
+      root.querySelector('#meSave').addEventListener('click', () => {
+        const name = root.querySelector('#me_name').value.trim(); if (!name) return toast('请输入名称');
+        m.name = name;
+        m.category = root.querySelector('#me_cat').value;
+        m.color = m.category;
+        const isB = seg.querySelector('.opt.active').dataset.mt === 'balance';
+        if (isB) {
+          m.balance = Math.max(0, Number(root.querySelector('#me_bal').value) || 0);
+          m.totalUses = 1; m.usedUses = 0;
+        } else {
+          m.totalUses = Math.max(1, Number(root.querySelector('#me_uses').value) || 1);
+          m.usedUses = Math.min(m.totalUses, Math.max(0, Number(root.querySelector('#me_used').value) || 0));
+          m.balance = 0;
+        }
+        m.expiry = root.querySelector('#me_exp').value || (m.expiry || '');
+        persist(); closeSheet(); navigate('membershipDetail', m.id); toast('已保存');
+      });
+    });
+  }
+
   /* Edit a knowledge resource (title / platform / category / price / uses /
      progress / dates) and optionally delete it. */
   function openKnowledgeEditSheet(k) {
@@ -3808,13 +3966,11 @@
         rerender();
         break;
       }
-      case 'va-open':
-        vAddForm = { brand: el.dataset.brand };
-        rerender();
+      case 'voucher-add':
+        openVoucherAddSheet(el.dataset.brand);
         break;
-      case 'va-open-new':
-        vAddForm = { brand: '' };
-        rerender();
+      case 'voucher-add-new':
+        openVoucherBrandSheet();
         break;
       // 类型分段控件（内联表单/弹窗通用）：切换类型时就地显示对应字段组，不跳转、不丢输入
       case 'vt-opt': {
@@ -3831,47 +3987,6 @@
             if (g) g.hidden = false;
           });
         }
-        break;
-      }
-      case 'va-cancel':
-        vAddForm = null;
-        rerender();
-        break;
-      case 'va-save': {
-        // 新建商家：只填品牌名，创建独立商家（无券）
-        if (!el.dataset.brand) {
-          const bInput = document.getElementById('va_brand');
-          const b = (bInput && bInput.value.trim()) || '';
-          if (!b) return toast('请输入品牌名');
-          if (state.voucherBrands.some((x) => x.name === b)) return toast('商家「' + b + '」已存在');
-          state.voucherBrands.push({ id: uid(), name: b });
-          vAddForm = null;
-          persist(); rerender(); toast('已添加商家「' + b + '」');
-          break;
-        }
-        // 商家内添加券（按类型读取不同字段）
-        const nameEl = document.getElementById('va_name');
-        const name = (nameEl && nameEl.value.trim()) || '';
-        if (!name) return toast('请输入名称');
-        const type = voucherTypeOf();
-        const m = VOUCHER_TYPES[type] || VOUCHER_TYPES.coupon;
-        const expiry = document.getElementById('va_exp').value || '';
-        const scope = document.getElementById('va_scope').value.trim() || '';
-        const obj = { id: uid(), name, brand: el.dataset.brand, type, expiry, scope, note: '', color: m.cat, transactions: [] };
-        if (m.mode === 'amount') {
-          const bal = Math.max(0, Number(document.getElementById('va_balance').value) || 0);
-          obj.balance = bal; obj.totalUses = 1; obj.usedUses = 0;
-          obj.transactions.push({ id: uid(), date: nowDT(), kind: 'add', amount: bal, note: '新增储值卡，余额 ¥' + bal });
-        } else {
-          const totalUses = Math.max(1, Number(document.getElementById('va_uses').value) || 1);
-          const usedUses = Math.max(0, Math.min(Number(document.getElementById('va_used').value) || 0, totalUses));
-          obj.totalUses = totalUses; obj.usedUses = usedUses;
-          if (m.rule) { obj.threshold = Math.max(0, Number(document.getElementById('va_thr').value) || 0); obj.discount = Math.max(0, Number(document.getElementById('va_dis').value) || 0); }
-          obj.transactions.push({ id: uid(), date: nowDT(), kind: 'add', amount: 0, note: '新增券' });
-        }
-        state.vouchers.push(obj);
-        vAddForm = null;
-        persist(); rerender(); toast('已添加「' + name + '」');
         break;
       }
       case 'voucher-use': {
@@ -3988,6 +4103,17 @@
         if (!m) break;
         const tx = m.transactions.find((t) => t.id === el.dataset.txid);
         if (tx) { m.transactions = m.transactions.filter((t) => t.id !== tx.id); persist(); navigate('membershipDetail', m.id); toast('已删除'); }
+        break;
+      }
+      case 'mem-edit':
+        openMembershipEditSheet(state.memberships.find((x) => x.id === el.dataset.id));
+        break;
+      case 'mem-del': {
+        const m = state.memberships.find((x) => x.id === el.dataset.id);
+        if (!m) break;
+        if (!confirm('确认删除「' + m.name + '」？此操作不可撤销')) break;
+        state.memberships = state.memberships.filter((x) => x.id !== m.id);
+        persist(); closeSheet(); navigate('assets'); toast('已删除：' + m.name);
         break;
       }
       case 'voucher-txn-del': {
@@ -4149,8 +4275,7 @@
     const act = el.dataset.dblAction;
     const id = el.dataset.id;
     const brand = el.dataset.brand;
-    if (act === 'voucher-edit' && id) openVoucherEditSheet(state.vouchers.find((x) => x.id === id));
-    else if (act === 'voucher-brand-edit' && brand) {
+    if (act === 'voucher-brand-edit' && brand) {
       const oldName = brand;
       openSheet('修改商家名', `
         <div class="field" style="margin:8px 0"><label>商家名</label><input id="vbe_name" value="${esc(oldName)}" placeholder="如 喜茶 / 瑞幸"></div>
