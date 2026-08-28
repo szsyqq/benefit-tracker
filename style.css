@@ -1205,9 +1205,9 @@ ul, li { list-style: none; }
 .merge-row .main { flex: 1; min-width: 0; }
 .merge-row .title { font-size: var(--fs-body); font-weight: 500; }
 .merge-row .desc { font-size: var(--fs-body2); color: var(--txt2); margin-top: 1px; }
-/* Per-card bank pill in merge-row desc */
-.merge-row .cd-pill { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border-radius: 4px; margin: 1px 2px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.merge-row .cd-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* 带色点的胶囊标签 —— 信用卡页 merge-row 与资产页权益区块共用，保证两处标签一致 */
+.cd-pill { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border-radius: 4px; margin: 1px 2px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.cd-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 /* Merge tile grid (small summary squares) */
 .merge-tile-grid {
@@ -1572,6 +1572,19 @@ ul, li { list-style: none; }
 .swipe-front.used-up { background: var(--bg3); }
 .swipe-front.used-up .b-name,
 .swipe-front.used-up .b-sub { color: var(--txt2); }
+
+/* .ic-card 自带 margin: 0 var(--mx) 6px 与自身边框；作为 swipe-front 时必须
+   清零外边距并填满 .swipe，否则 front 左右内缩会把背后的编辑/删除按钮永久露出来 */
+.swipe-front.ic-card {
+  margin: 0;
+  height: 64px;
+  padding: 8px 14px;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+/* 左滑时不要让 :active 的 scale 覆盖 swipe 的 translateX */
+.swipe .ic-card:active { transform: none; }
 
 /* Benefit card (inside swipe-front) */
 .benefit-top { display: flex; align-items: center; gap: 10px; }
